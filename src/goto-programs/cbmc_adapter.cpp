@@ -266,6 +266,34 @@ irept mk_binary(
   return e;
 }
 
+// Rewrites `is_dynamic_object(p)` (__CPROVER_DYNAMIC_OBJECT) in place. A bare
+// id irep can be a name: CBMC's contracts library has a local variable called
+// is_dynamic_object.
+static void rewrite_is_dynamic_object(irept &irep)
+{
+  if (irep.id() != "is_dynamic_object" || irep.get_sub().size() != 1)
+    return;
+
+  // The body of __CPROVER_DYNAMIC_OBJECT in builtin_libs.c. The p != NULL
+  // test is needed: a malloc that returns NULL marks object 0 dynamic.
+  const irept ptr = irep.get_sub()[0];
+  const typet bool_ty = bool_type();
+
+  irept is_dynamic("symbol");
+  is_dynamic.add("type") = array_typet(bool_ty, exprt("infinity", size_type()));
+  is_dynamic.set("identifier", "c:@__ESBMC_is_dynamic");
+
+  irep = mk_binary(
+    "and",
+    bool_ty,
+    mk_binary("notequal", bool_ty, ptr, mk_null_ptr(ptr.find("type"))),
+    mk_binary(
+      "index",
+      bool_ty,
+      is_dynamic,
+      mk_unary("pointer_object", pointer_type(), ptr)));
+}
+
 // Element type of a complex type irep, tolerant of both shapes: CBMC's raw
 // form keeps it as the sole positional sub; the normalised form (fix_type /
 // fix_expression's own type case) as the "subtype" named-sub.
@@ -368,30 +396,7 @@ void fix_expression(irept &irep)
     // Fall through: the operand-wrap step normalises the new typecast/constant.
   }
 
-  // A bare id irep can be a name: CBMC's contracts library has a local
-  // variable called is_dynamic_object.
-  if (irep.id() == "is_dynamic_object" && irep.get_sub().size() == 1)
-  {
-    // The body of __CPROVER_DYNAMIC_OBJECT in builtin_libs.c. The p != NULL
-    // test is needed: a malloc that returns NULL marks object 0 dynamic.
-    const irept ptr = irep.get_sub()[0];
-    const typet bool_ty = bool_type();
-
-    irept is_dynamic("symbol");
-    is_dynamic.add("type") =
-      array_typet(bool_ty, exprt("infinity", size_type()));
-    is_dynamic.set("identifier", "c:@__ESBMC_is_dynamic");
-
-    irep = mk_binary(
-      "and",
-      bool_ty,
-      mk_binary("notequal", bool_ty, ptr, mk_null_ptr(ptr.find("type"))),
-      mk_binary(
-        "index",
-        bool_ty,
-        is_dynamic,
-        mk_unary("pointer_object", pointer_type(), ptr)));
-  }
+  rewrite_is_dynamic_object(irep);
 
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
