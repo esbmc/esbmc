@@ -13,7 +13,8 @@ thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write. A failed assumption, `abort()` included, stops only its own thread.
-The effort figures are estimates.
+Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
+event count needs. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -251,6 +252,30 @@ disagreements:
   `github_6474_reinit` re-initialises a locked mutex: the default unlocks
   it, `--partial-order` keeps it locked and reports a deadlock.
   `02_account_symbolic_05` runs the default at `--context-bound 1`.
+
+Z3 against Bitwuzla (2026-11-27, one build with both, `--extra-args` of the
+compare script). On the §2 counters, `--partial-order` takes, for 2 to 5
+threads, 2.7, 5.1, 17.4 and 42.7 s with Z3 and 0.8, 3.4, 5.6 and 9.9 s with
+Bitwuzla using atomic sections, and 1.0, 5.8, 58.2 and >120 s with Z3 and
+0.5, 1.8, 5.0 and 22.1 s with Bitwuzla using the mutex. The default with
+either solver passes 120 s from 4 threads with atomic sections and from 3
+with the mutex. Variants without the last join are FAILED in every mode, in
+under 0.5 s. On `esbmc-unix` and `esbmc-unix2` at 20 s, `--partial-order`
+decides 175 tests with Z3 and 182 with Bitwuzla; Z3 times out on 7 that the
+default decides, Bitwuzla on 1 (`03_arithmetic_progression_03`). Both
+solvers give the same 11 disagreements: the 7 above that remained before
+the `11_time_var_mutex` fix, and 4 false data races on an `atomic_uint`
+(`github_2149_pthread_{2,6}`, `github_3955_{2,5}`), which C11 5.1.2.4p25
+excludes.
+
+Clocks were 32-bit bitvectors. They now have the fewest bits that hold one
+value per event and a stop time above them all. With Z3 (one core,
+2026-11-27), the §2 counter with an atomic section takes 0.2, 0.2, 0.5 and
+3.7 s for 2 to 5 threads, against 3.3, 5.3, 17.3 and 47.2 s at 32 bits. The
+mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
+`esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
+total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
+narrow clocks under Bitwuzla, and integer clocks, are not measured yet.
 
 ## 5. Tests
 

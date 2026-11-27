@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 8
+^WARNING: CBMC adapter: ignoring a loop invariant: CBMC adapter: .*allocate
+^VERIFICATION SUCCESSFUL$

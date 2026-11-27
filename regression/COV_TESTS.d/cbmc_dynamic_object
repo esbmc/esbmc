@@ -1,0 +1,5 @@
+regression/goto-transcoder/cbmc_dynamic_object_fail
+regression/goto-transcoder/cbmc_dynamic_object_offset
+regression/goto-transcoder/cbmc_dynamic_object_no_malloc
+regression/goto-transcoder/cbmc_dynamic_object_name
+regression/goto-transcoder/cbmc_dynamic_object_invariant_fail

@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^VERIFICATION FAILED$
+^  FAILED       \[main.assertion.1\]  line 5  \+i is 3, not 4$
