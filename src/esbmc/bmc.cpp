@@ -249,7 +249,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(
         std::make_unique<memory_model_sct>(
           opts.get_bool_option("data-races-check"),
-          opts.get_bool_option("deadlock-check")));
+          opts.get_bool_option("deadlock-check"),
+          &ns));
 
     // Run cache if user has specified the option
     if (

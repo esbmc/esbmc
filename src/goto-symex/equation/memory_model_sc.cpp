@@ -1,5 +1,6 @@
 #include <goto-symex/equation/memory_model_sc.h>
 #include <irep2/irep2_utils.h>
+#include <util/symtab/symbol.h>
 
 #include <set>
 #include <string>
@@ -354,6 +355,8 @@ void memory_model_sct::data_races()
 {
   for (const auto &[object, write_ids] : writes)
   {
+    if (is_atomic_object(object))
+      continue;
     std::set<size_t> accesses(write_ids.begin(), write_ids.end());
     if (auto it = reads.find(object); it != reads.end())
       accesses.insert(it->second.begin(), it->second.end());
@@ -517,6 +520,12 @@ bool memory_model_sct::is_atomic_bound(size_t id) const
   const symex_targett::step_typet type = events[id].step->type;
   return type == symex_targett::ATOMIC_BEGIN ||
          type == symex_targett::ATOMIC_END;
+}
+
+bool memory_model_sct::is_atomic_object(const irep_idt &object) const
+{
+  const symbolt *symbol = ns ? ns->lookup(object) : nullptr;
+  return symbol && symbol->get_type().get_bool("#atomic");
 }
 
 bool memory_model_sct::same_thread(size_t a, size_t b) const

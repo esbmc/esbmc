@@ -1,6 +1,7 @@
 #pragma once
 
 #include <goto-symex/equation/ssa_step_algorithm.h>
+#include <util/symtab/namespace.h>
 
 #include <map>
 #include <set>
@@ -26,7 +27,9 @@
 /// Each event keeps its clock in its cond, for the trace to order steps by.
 /// With \p races, a claim at the end of the equation for each pair of
 /// conflicting events of different threads states that no execution places
-/// them next to each other. Two events inside atomic sections never race.
+/// them next to each other. Two events inside atomic sections never race,
+/// and neither do accesses to an _Atomic object (C11 5.1.2.4p25), which \p ns
+/// identifies.
 /// With \p deadlocks, the events whose clock is below a free stop time form a
 /// prefix of the execution, and only the locks in it need a release before
 /// them. A claim states that no prefix leaves main, and every other thread
@@ -35,8 +38,11 @@
 class memory_model_sct : public ssa_step_algorithm
 {
 public:
-  explicit memory_model_sct(bool races = false, bool deadlocks = false)
-    : ssa_step_algorithm(true), races(races), deadlocks(deadlocks)
+  explicit memory_model_sct(
+    bool races = false,
+    bool deadlocks = false,
+    const namespacet *ns = nullptr)
+    : ssa_step_algorithm(true), races(races), deadlocks(deadlocks), ns(ns)
   {
   }
 
@@ -69,6 +75,7 @@ private:
   symex_target_equationt::SSA_stepst constraints, claims;
   const bool races;
   const bool deadlocks;
+  const namespacet *const ns;
   size_t n_claims = 0;
 
   void block_on_halted_joins(symex_target_equationt::SSA_stepst &steps) const;
@@ -91,5 +98,6 @@ private:
   void constrain(const expr2tc &cond, const eventt &about);
   expr2tc before(size_t a, size_t b) const;
   bool is_atomic_bound(size_t id) const;
+  bool is_atomic_object(const irep_idt &object) const;
   bool same_thread(size_t a, size_t b) const;
 };
