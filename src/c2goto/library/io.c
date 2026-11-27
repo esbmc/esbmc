@@ -481,6 +481,12 @@ __ESBMC_HIDE:;
 off_t lseek(int fd, off_t offset, int whence)
 {
 __ESBMC_HIDE:;
+  if (whence != SEEK_SET && whence != SEEK_CUR && whence != SEEK_END)
+  {
+    __esbmc_errno = 22; // EINVAL - invalid whence
+    return -1;
+  }
+
   // Check if this is a pipe file descriptor
   if (fd == __esbmc_pipe_fds[0] || fd == __esbmc_pipe_fds[1])
   {
