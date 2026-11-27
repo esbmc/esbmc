@@ -60,6 +60,7 @@ private:
   };
 
   std::vector<eventt> events;
+  type2tc clock_type;
   std::map<unsigned, std::vector<size_t>> per_thread;
   std::map<irep_idt, std::vector<size_t>> reads, writes;
   std::vector<size_t> spawns, joins;

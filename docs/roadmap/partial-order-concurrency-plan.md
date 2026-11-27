@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-26):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
+**Status (2026-11-27):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -10,7 +10,8 @@ on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
 A loop cut by `--no-unwinding-assertions` stops only its own thread and
 the threads that wait for it. A compound assignment to a narrow `_Atomic`
-object is recorded as a write. The effort figures are estimates.
+object is recorded as a write. Clocks are as wide as the event count needs.
+The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -18,7 +19,7 @@ object is recorded as a write. The effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-26.
+**Last updated:** 2026-11-27.
 
 ## 1. Goal
 
@@ -242,6 +243,15 @@ disagreements:
   `github_6474_reinit` re-initialises a locked mutex: the default unlocks
   it, `--partial-order` keeps it locked and reports a deadlock.
   `02_account_symbolic_05` runs the default at `--context-bound 1`.
+
+Clocks were 32-bit bitvectors. They now have the fewest bits that hold one
+value per event and a stop time above them all. With Z3 (one core,
+2026-11-27), the §2 counter with an atomic section takes 0.2, 0.2, 0.5 and
+3.7 s for 2 to 5 threads, against 3.3, 5.3, 17.3 and 47.2 s at 32 bits. The
+mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
+`esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
+total on the 175 tests decided). Integer clocks and Bitwuzla are not
+measured yet.
 
 ## 5. Tests
 
