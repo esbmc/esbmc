@@ -207,7 +207,8 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
         "lock-order-check",
         "atomicity-check",
         "ltl",
-        "interactive-ileaves"})
+        "interactive-ileaves",
+        "interval-symex-assert"})
     if (cmdline.isset(incompatible))
     {
       log_error("--partial-order cannot be combined with --{}", incompatible);

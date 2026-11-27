@@ -777,8 +777,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   //   - incremental-BMC reuses one goto_symext across unwind iterations
   //   - k-induction (base/forward/inductive) havocs loop variables
   //   - loop-invariant and function contracts inject havoc+assume sequences
+  //   - --partial-order runs threads one after another, so the domain would
+  //     hand one thread's writes to the next thread's loop guards
   if (
-    options.get_bool_option("k-induction") ||
+    cmdline.isset("partial-order") || options.get_bool_option("k-induction") ||
     cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
     cmdline.isset("enforce-all-contracts") ||
