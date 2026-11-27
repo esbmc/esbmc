@@ -25,8 +25,8 @@ sections correct earlier ones. Where they disagree, these hold:
   external goto-transcoder repository.
 - **Still open in the reader:** it accepts format version 6 only
   (`read_cbmc_goto_object.cpp`); `is_fresh` separation and the `contracts_*`
-  helpers (§4.6); SIMD, `setjmp`, `va_start` and `__CPROVER_DYNAMIC_OBJECT`,
-  which are declined and pinned; and ESBMC's whole-array `==` reporting
+  helpers (§4.6); SIMD, `setjmp` and `va_start`, which are declined and
+  pinned; and ESBMC's whole-array `==` reporting
   may-differ on equal arrays (§4.4), which has no issue.
 - **Kani.** The 2026-08-26 sweep is the latest measurement: 76 crashes (44
   "rvalue reference to array", 20 silent segfaults, 12 solver errors), 155
@@ -711,17 +711,13 @@ FAILED where CBMC proves SUCCESSFUL), and SIMD vector types (`__attribute__((vec
 CBMC lowers element-wise but ESBMC's vector SMT encoding hangs in the solver).
 **CPROVER pointer/introspection intrinsics — swept 2026-07-18.** `__CPROVER_POINTER_OBJECT`,
 `__CPROVER_POINTER_OFFSET`, `__CPROVER_same_object`, `__CPROVER_r_ok`, and `__CPROVER_assume`
-already verify to CBMC parity. Four gaps remain, each recorded for future work:
-- **`__CPROVER_DYNAMIC_OBJECT` (`is_dynamic_object`) — declined cleanly (✅ landed).** No
-  `migrate_expr` handler → it `abort()`ed. ESBMC tracks the identical fact in its symex-managed
-  `c:@__ESBMC_is_dynamic` bool array (indexed by pointer object, set on `malloc` in
-  `symex_assign.cpp`), so the faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]` — but
-  that needs the array **force-linked even when the binary never calls `malloc`** (otherwise
-  absent) with its `__ESBMC_inf_size` shape preserved, so it is deferred. Only an *explicit*
-  `__CPROVER_DYNAMIC_OBJECT` reaches the adapter (CBMC's `free`/dynamic checks live in library
-  bodies re-linked at analysis time, not the serialised binary — a `free`-using binary verifies
-  fine), so `fix_expression` now throws a clean error instead of aborting. Pinned by
-  `cbmc_dynamic_object`.
+already verify to CBMC parity. The gaps found then:
+- **`__CPROVER_DYNAMIC_OBJECT` (`is_dynamic_object`) — ✅ landed.** `fix_expression` rewrites
+  it to `p != NULL && __ESBMC_is_dynamic[pointer_object(p)]`, the body of the C library's
+  `__CPROVER_DYNAMIC_OBJECT`. The additions always link the array, zero-initialised, so a binary
+  that never calls `malloc` reads false. Pinned by the `cbmc_dynamic_object*` tests. Still open:
+  CBMC's default `--pointer-primitive-check`, which fails the primitive on a freed or invalid
+  pointer, has no `--binary` counterpart, so ESBMC reports SUCCESSFUL there.
 - **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
   already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
   vector hang, §4.4) — a solver-performance item, not an adapter gap.

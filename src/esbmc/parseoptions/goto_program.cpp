@@ -849,6 +849,29 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  __ESBMC_assume(q != 0 || n > __PTRDIFF_MAX__);\n"
     "  return q;\n"
     "}\n"
+    // CBMC's __CPROVER_array_replace copies the shorter of the two objects'
+    // remainders and keeps the destination's tail; __CPROVER_array_copy
+    // additionally leaves that tail unconstrained (copied from an
+    // uninitialised buffer, without a loop the k-induction and TS-check
+    // passes would have to handle). The copy reads the whole source before
+    // writing, hence memmove.
+    "void __cbmc_array_replace_impl(void *d, const void *s)\n"
+    "{\n"
+    "  __SIZE_TYPE__ dn = __ESBMC_builtin_object_size(d, 0);\n"
+    "  __SIZE_TYPE__ sn = __ESBMC_builtin_object_size(s, 0);\n"
+    "  memmove(d, s, sn < dn ? sn : dn);\n"
+    "}\n"
+    "void __cbmc_array_copy_impl(void *d, const void *s)\n"
+    "{\n"
+    "  __SIZE_TYPE__ dn = __ESBMC_builtin_object_size(d, 0);\n"
+    "  __SIZE_TYPE__ sn = __ESBMC_builtin_object_size(s, 0);\n"
+    "  __cbmc_array_replace_impl(d, s);\n"
+    "  if (dn > sn)\n"
+    "  {\n"
+    "    unsigned char tail[dn - sn];\n"
+    "    memcpy((unsigned char *)d + sn, tail, dn - sn);\n"
+    "  }\n"
+    "}\n"
     "extern int __fpclassifyf(float);\n"
     "extern int __fpclassifyd(double);\n"
     "extern int __fpclassifyl(long double);\n"
@@ -877,6 +900,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
     "  (void *)calloc,    (void *)__cbmc_allocate_impl,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
+    "  (void *)__cbmc_array_copy_impl, (void *)__cbmc_array_replace_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";
