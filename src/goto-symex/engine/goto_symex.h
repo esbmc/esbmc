@@ -253,8 +253,7 @@ protected:
    *  @param expr Expression to eliminate dereferences from.
    *  @param mode The dereference mode.
    *  @param block_assertions Suppress the pointer-safety claims this
-   *         dereference would otherwise record. Only for probing what a
-   *         pointer may designate before deciding whether the access happens.
+   *         dereference would otherwise record.
    */
   void dereference(
     expr2tc &expr,

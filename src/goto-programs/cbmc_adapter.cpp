@@ -2155,11 +2155,10 @@ bool rewrite_array_equal(irept &code)
 // (symex_other.cpp).
 bool rewrite_havoc_object(irept &code)
 {
-  const irept::subt ops = code.get_sub();
-  if (ops.size() != 1)
+  if (code.get_sub().size() != 1)
     return false;
 
-  make_call(code, "c:@F@__ESBMC_havoc_object_unchecked", ops);
+  make_call(code, "c:@F@__ESBMC_havoc_object_unchecked", code.get_sub());
   return true;
 }
 
