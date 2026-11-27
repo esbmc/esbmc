@@ -7,9 +7,10 @@
 /// --partial-order prototype handles (#10990): shared globals of scalar
 /// or array-of-scalar type, threads created with a null argument, and
 /// pthread create, join, exit, mutex and condition-variable calls. The
-/// operational models are not checked. With \p verifying, also rejects what
-/// the memory model cannot order yet: assumptions. With \p races, also
-/// rejects global arrays. With \p deadlocks, also rejects pthread_exit.
+/// operational models are not checked. With \p races, also rejects global
+/// arrays. With \p deadlocks, also rejects pthread_exit, and, with
+/// \p verifying, assumptions, which --deadlock-check keeps on the whole
+/// equation whatever the clocks say.
 /// Logs the first construct outside that scope.
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,

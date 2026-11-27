@@ -1866,10 +1866,10 @@ protected:
   {
   }
 
-  /** Stop only the current thread where \p cont, the condition to run one
-   *  more iteration or recursive call past the unwinding bound, holds.
-   *  Returns false when the bound must be an assumption on the whole
-   *  equation instead. */
+  /** Stop only the current thread where \p cond holds: a loop or recursion
+   *  needs one more iteration or call past its bound, or an assumption fails.
+   *  Returns false when this must be an assumption on the whole equation
+   *  instead. */
   virtual bool halt_thread_at_bound(const expr2tc &)
   {
     return false;

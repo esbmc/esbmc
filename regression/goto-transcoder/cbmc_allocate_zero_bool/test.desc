@@ -1,0 +1,4 @@
+CORE
+cbmc_allocate_zero_bool.goto
+--binary --function main --force-malloc-success
+^VERIFICATION SUCCESSFUL$

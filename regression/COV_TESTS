@@ -2457,6 +2457,12 @@ regression/esbmc-unix/partial_order_loop_bound_atomic_fail
 regression/esbmc-unix/partial_order_loop_bound_fail
 regression/esbmc-unix/partial_order_loop_bound_join
 regression/esbmc-unix/partial_order_loop_bound_join_fail
+regression/esbmc-unix/partial_order_abort
+regression/esbmc-unix/partial_order_abort_fail
+regression/esbmc-unix/partial_order_assume_halts
+regression/esbmc-unix/partial_order_assume_halts_fail
+regression/esbmc-unix/partial_order_assume_lock
+regression/esbmc-unix/partial_order_assume_lock_fail
 regression/esbmc-unix/pthread_once
 regression/esbmc-unix/pthread_once_norace
 regression/esbmc-unix/pthread_once_race_fail
