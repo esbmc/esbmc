@@ -12,7 +12,8 @@ A loop or recursion cut by `--no-unwinding-assertions` stops only its own
 thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
-write. A failed assumption, `abort()` included, stops only its own thread.
+write. A failed assumption, `abort()` included, stops only its own thread,
+and a join on a thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
@@ -276,6 +277,12 @@ mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
 `esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
 total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
 narrow clocks under Bitwuzla, and integer clocks, are not measured yet.
+
+A halt hid violations. Once any thread halted, a join on a thread that never
+halts was taken never to return, since the disjunction of no halts is true,
+and the joining thread's later claims held. So main's `reach_error()`, which
+`--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
+never reported. Fixed: such a thread ends (`partial_order_halt_*`).
 
 ## 5. Tests
 

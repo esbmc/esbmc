@@ -969,6 +969,33 @@ TEST_CASE("a thread joining a halted thread never ends either", "[po]")
     }
 }
 
+TEST_CASE("a join on a thread that ends returns", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const expr2tc h = symbol2tc(get_bool_type(), "h");
+  add_event(eq, 0, symex_targett::JOIN, thread_id(1));
+  add_event(eq, 0, symex_targett::SHARED_READ, x(2));
+  symex_targett::sourcet source;
+  eq.assertion(
+    gen_true_expr(), gen_false_expr(), gen_true_expr(), "", {}, source, 0);
+  eq.event(h, symex_targett::HALT, expr2tc(), source);
+  add_event(eq, 1, symex_targett::SHARED_WRITE, x(1));
+  memory_model_sct().run(eq.SSA_steps);
+
+  for (const auto &s : eq.SSA_steps)
+  {
+    expr2tc guard = s.guard, cond = s.cond;
+    simplify(guard);
+    simplify(cond);
+    if (s.type == symex_targett::SHARED_READ)
+      CHECK(is_true(guard));
+    else if (s.is_assert())
+      CHECK(is_false(cond));
+  }
+}
+
 TEST_CASE("a thread halted in an atomic section keeps others out", "[po]")
 {
   contextt ctx;
