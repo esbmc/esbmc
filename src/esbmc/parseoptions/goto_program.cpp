@@ -866,6 +866,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    // Also the target of cbmc_adapter's zero-initialising `allocate`.
     "  (void *)calloc,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
