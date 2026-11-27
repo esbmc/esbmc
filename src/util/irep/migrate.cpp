@@ -1212,8 +1212,9 @@ static const exprt &cpp_new_size(const exprt &expr)
   return none;
 }
 
-/// The two forms recognised before the id dispatch below: a nil expression,
-/// and a node carrying a #derived_to_base marker.
+/// The forms recognised before the id dispatch below: a nil expression, a node
+/// whose operands were never converted, and a node carrying a #derived_to_base
+/// marker.
 ///
 /// That marker names whichever node is being converted, and that is almost
 /// never a cast: over regression/esbmc-cpp it lands on a symbol 32474 times and
@@ -1228,6 +1229,12 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc();
     return true;
   }
+
+  // A CBMC node the --binary adapter does not convert keeps its operands as
+  // positional subs, where op0() would read past an empty operand list.
+  if (!expr.has_operands() && !expr.get_sub().empty())
+    throw "migrate expr failed: " + id2string(expr.id()) +
+      " has unconverted operands";
 
   const irep_idt base = expr.get("#derived_to_base");
   if (base.empty() || expr.id() == exprt::typecast)
