@@ -3765,6 +3765,56 @@ static expr2tc fold_pointer_to_integer(const type2tc &type, const expr2tc &ptr)
   return typecast2tc(type, typecast2tc(ptraddr_type2(), x));
 }
 
+/// A pointer-to-pointer typecast, dropped when it does not change the width
+/// of the pointee.
+static expr2tc
+simplify_pointer_to_pointer(const type2tc &type, const expr2tc &simp)
+{
+  // Casting from one pointer to another is meaningless... except when there's
+  // pointer arithmetic about to be applied to it. So, only remove typecasts
+  // that don't change the subtype width.
+  const pointer_type2t &ptr_to = to_pointer_type(type);
+  const pointer_type2t &ptr_from = to_pointer_type(simp->type);
+
+  if (
+    is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
+    is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
+    return expr2tc(); // Not worth thinking about
+
+  if (
+    is_array_type(ptr_to.subtype) &&
+    is_symbol_type(to_array_type(ptr_to.subtype).subtype))
+    return expr2tc(); // Not worth thinking about
+
+  if (
+    is_array_type(ptr_from.subtype) &&
+    is_symbol_type(to_array_type(ptr_from.subtype).subtype))
+    return expr2tc(); // Not worth thinking about
+
+  try
+  {
+    unsigned int to_width =
+      (is_empty_type(ptr_to.subtype)) ? 8 : ptr_to.subtype->get_width();
+    unsigned int from_width =
+      (is_empty_type(ptr_from.subtype)) ? 8 : ptr_from.subtype->get_width();
+
+    if (to_width == from_width)
+      return simp;
+  }
+  catch (const array_type2t::dyn_sized_array_excp &e)
+  {
+    // Something crazy, and probably C++ based, occurred. Don't attempt to
+    // simplify.
+  }
+  catch (const type2t::symbolic_type_excp &e)
+  {
+    /* might happen if there is a symbolic type in a ptr's subtype; these
+     * have not been squashed by thrash_type_symbols() */
+  }
+
+  return expr2tc();
+}
+
 /// Constant-operand typecasts, dispatched on the source type.
 ///
 /// nullopt when no arm matches, so the caller falls through to the
@@ -3827,51 +3877,7 @@ expr2tc typecast2t::do_simplify() const
   else if (expr2tc folded = fold_pointer_to_integer(type, simp))
     return folded;
   else if (is_pointer_type(type) && is_pointer_type(simp))
-  {
-    // Casting from one pointer to another is meaningless... except when there's
-    // pointer arithmetic about to be applied to it. So, only remove typecasts
-    // that don't change the subtype width.
-    const pointer_type2t &ptr_to = to_pointer_type(type);
-    const pointer_type2t &ptr_from = to_pointer_type(simp->type);
-
-    if (
-      is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
-      is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
-      return expr2tc(); // Not worth thinking about
-
-    if (
-      is_array_type(ptr_to.subtype) &&
-      is_symbol_type(to_array_type(ptr_to.subtype).subtype))
-      return expr2tc(); // Not worth thinking about
-
-    if (
-      is_array_type(ptr_from.subtype) &&
-      is_symbol_type(to_array_type(ptr_from.subtype).subtype))
-      return expr2tc(); // Not worth thinking about
-
-    try
-    {
-      unsigned int to_width =
-        (is_empty_type(ptr_to.subtype)) ? 8 : ptr_to.subtype->get_width();
-      unsigned int from_width =
-        (is_empty_type(ptr_from.subtype)) ? 8 : ptr_from.subtype->get_width();
-
-      if (to_width == from_width)
-        return simp;
-    }
-    catch (const array_type2t::dyn_sized_array_excp &e)
-    {
-      // Something crazy, and probably C++ based, occurred. Don't attempt to
-      // simplify.
-    }
-    catch (const type2t::symbolic_type_excp &e)
-    {
-      /* might happen if there is a symbolic type in a ptr's subtype; these
-       * have not been squashed by thrash_type_symbols() */
-    }
-
-    return expr2tc();
-  }
+    return simplify_pointer_to_pointer(type, simp);
   else if (is_typecast2t(simp) && type == simp->type)
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
