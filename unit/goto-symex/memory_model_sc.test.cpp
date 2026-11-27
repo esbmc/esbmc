@@ -22,6 +22,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
 
 namespace
 {
@@ -683,6 +684,29 @@ TEST_CASE("accesses inside atomic sections do not race", "[po]")
   add_event(eq, 1, symex_targett::ATOMIC_END, expr2tc());
   memory_model_sct(true).run(eq.SSA_steps);
   CHECK(race_claims(eq).empty());
+}
+
+TEST_CASE("accesses to an _Atomic object do not race", "[po]")
+{
+  contextt ctx;
+  symbolt atomic_x;
+  atomic_x.id = "c:@x";
+  typet type = signedbv_typet(32);
+  type.set("#atomic", true);
+  atomic_x.set_type(type);
+  ctx.add(atomic_x);
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(
+    eq, 0, symex_targett::SHARED_WRITE, symbol2tc(get_int32_type(), "c:@y"));
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  add_event(
+    eq, 1, symex_targett::SHARED_READ, symbol2tc(get_int32_type(), "c:@y"));
+  memory_model_sct(true, false, &ns).run(eq.SSA_steps);
+  const auto claims = race_claims(eq);
+  REQUIRE(claims.size() == 1);
+  CHECK(claims[0]->comment == "R/W data race on c:@y");
 }
 
 namespace
