@@ -52,6 +52,7 @@ public:
    *  conversion, never the handle), so neither these nor any other smt_convt
    *  method exposes a solver-handle type. */
   void convert_ast(const expr2tc &expr);
+  void convert_laid_out_lazily(const expr2tc &expr);
   void convert_assign(const expr2tc &expr);
   /** Like convert_assign, but only binds the symbol to its value; nothing is
    *  asserted. */
@@ -99,6 +100,10 @@ public:
   void print_model();
 
 private:
+  /** Run @p solve until it is UNSAT or its model needs no deferred layout. */
+  template <class Solve>
+  smt_resultt solve_laying_out(Solve solve);
+
   std::unique_ptr<smt_solver_baset> solver_impl;
   std::vector<expr2tc> last_assumptions;
 };
