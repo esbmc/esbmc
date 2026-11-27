@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --falsification
+^Bug found \(k = 2\)$
+^VERIFICATION FAILED$

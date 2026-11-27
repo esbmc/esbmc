@@ -15,7 +15,8 @@ one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
-event count needs. The effort figures are estimates.
+event count needs. `--incremental-bmc` and `--falsification` raise its
+unwinding bound. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -278,6 +279,15 @@ mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
 `esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
 total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
 narrow clocks under Bitwuzla, and integer clocks, are not measured yet.
+
+`--partial-order` runs under `--incremental-bmc` and `--falsification`: each
+bound is one `--partial-order` run, and the forward condition proves the
+program once no thread's loop passes the bound (`partial_order_incremental_bmc*`,
+`partial_order_falsification_fail`). These strategies do not propagate
+arrays, so a join on `id[j]` reads the ids' array in its event's guard; the
+slicer now counts that read, where it had dropped the stores to the array
+(`partial_order_incremental_join*`). `--k-induction` is still rejected; the
+SV-COMP wrapper's concurrency path is the next step towards a benchexec run.
 
 ## 5. Tests
 

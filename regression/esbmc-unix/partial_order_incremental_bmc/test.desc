@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --incremental-bmc
+^Solution found by the forward condition; all states are reachable \(k = 2\)$
+^VERIFICATION SUCCESSFUL$

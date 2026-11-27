@@ -338,3 +338,51 @@ int main(void)
   CHECK(cut > 0);
   CHECK(elided > 0);
 }
+
+TEST_CASE("an event guard keeps the array stores it reads", "[symex][slice]")
+{
+  // --partial-order guards a join on a symbolic thread id with a read of the
+  // ids' array, and that read is in no assignment or claim.
+  const type2tc ids_type = array_type2tc(get_int32_type(), gen_ulong(2), false);
+  auto ids = [&](unsigned version) {
+    return symbol2tc(
+      ids_type, "ids", symbol2t::renaming_level::level2_global, 0, version);
+  };
+  auto elem = [](unsigned i) {
+    return constant_int2tc(get_uint64_type(), BigInt(i));
+  };
+  const expr2tc one = constant_int2tc(get_int32_type(), BigInt(1));
+
+  for (unsigned read : {0u, 1u})
+  {
+    contextt context;
+    const namespacet ns(context);
+    symex_target_equationt eq(ns);
+    symex_targett::sourcet source;
+    const expr2tc store = with2tc(ids_type, ids(1), elem(0), one);
+    eq.assignment(
+      gen_true_expr(),
+      ids(2),
+      ids(2),
+      store,
+      store,
+      source,
+      {},
+      false,
+      0,
+      expr2tc());
+    eq.event(
+      equality2tc(index2tc(get_int32_type(), ids(2), elem(read)), one),
+      symex_targett::JOIN,
+      constant_int2tc(get_uint32_type(), BigInt(1)),
+      source);
+
+    optionst options;
+    symex_slicet(options).run(eq.SSA_steps);
+
+    const auto &assign = eq.SSA_steps.front();
+    REQUIRE_FALSE(assign.ignore);
+    INFO("the join reads element " << read);
+    CHECK(store_elided(assign) == (read != 0));
+  }
+}
