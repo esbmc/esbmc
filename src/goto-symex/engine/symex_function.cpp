@@ -142,6 +142,35 @@ bool recursion_has_no_base_case(
 }
 } // namespace
 
+void goto_symext::recursion_bound(
+  const goto_functiont &goto_function,
+  const irep_idt &identifier)
+{
+  if (!no_unwinding_assertions)
+  {
+    // Distinguish a genuine weakness (a recursive function with no
+    // reachable base case — CWE-674) from a merely-exhausted k-bound. Only
+    // the former gets the "uncontrolled recursion" comment that the CWE
+    // mapping recognises; the latter stays intentionally unmapped.
+    if (recursion_has_no_base_case(goto_function, identifier))
+      claim(
+        gen_false_expr(),
+        "uncontrolled recursion in " + get_pretty_name(identifier.as_string()));
+    else
+      claim(gen_false_expr(), "recursion unwinding assertion");
+  }
+  else if (halt_thread_at_bound(gen_true_expr()))
+    cur_state->guard.make_false();
+  else
+  {
+    // Add an unwinding assumption.
+    expr2tc now_guard = cur_state->guard.as_expr();
+    expr2tc not_now = not2tc(now_guard);
+    guard_by_interleaving(not_now);
+    target->assumption(now_guard, not_now, cur_state->source, first_loop);
+  }
+}
+
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
   BigInt unwind)
@@ -578,31 +607,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // D is the maximum recursion depth reachable under the input constraints.
   if (get_unwind_recursion(identifier, unwinding_counter))
   {
-    if (!no_unwinding_assertions)
-    {
-      // Distinguish a genuine weakness (a recursive function with no
-      // reachable base case — CWE-674) from a merely-exhausted k-bound. Only
-      // the former gets the "uncontrolled recursion" comment that the CWE
-      // mapping recognises; the latter stays intentionally unmapped.
-      if (recursion_has_no_base_case(goto_function, identifier))
-        claim(
-          gen_false_expr(),
-          "uncontrolled recursion in " +
-            get_pretty_name(identifier.as_string()));
-      else
-        claim(gen_false_expr(), "recursion unwinding assertion");
-    }
-    else if (halt_thread_at_bound(gen_true_expr()))
-      cur_state->guard.make_false();
-    else
-    {
-      // Add an unwinding assumption.
-      expr2tc now_guard = cur_state->guard.as_expr();
-      expr2tc not_now = not2tc(now_guard);
-      guard_by_interleaving(not_now);
-      target->assumption(now_guard, not_now, cur_state->source, first_loop);
-    }
-
+    recursion_bound(goto_function, identifier);
     cur_state->source.pc++;
     return;
   }

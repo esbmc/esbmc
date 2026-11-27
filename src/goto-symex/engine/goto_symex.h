@@ -638,6 +638,12 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Claim, assume or halt at a call to \p identifier past its recursion
+   *  bound. */
+  void recursion_bound(
+    const goto_functiont &goto_function,
+    const irep_idt &identifier);
+
   /** Convert an actual argument to its parameter's type, claiming the call
    *  undefined when the two are incompatible. */
   expr2tc argument_value(
