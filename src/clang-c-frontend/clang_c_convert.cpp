@@ -3100,6 +3100,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
+    // `T x{y}` with y of class type T copy-initialises x from y rather than
+    // initialising its first member (CWG 1467, CWG 2137).
+    if (
+      init_stmt.getType()->isRecordType() && init_stmt.getNumInits() == 1 &&
+      ASTContext->hasSameUnqualifiedType(
+        init_stmt.getType(), init_stmt.getInit(0)->getType()))
+    {
+      if (get_expr(*init_stmt.getInit(0), new_expr))
+        return true;
+      break;
+    }
+
     // Structs/unions/arrays put the initializer on operands
     if (t.is_struct() || t.is_array() || t.is_vector())
     {
