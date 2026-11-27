@@ -678,6 +678,24 @@ const struct group_opt_templ all_cmd_options[] = {
      "k-induction phase is selected. --check-vacuity applies to the whole run, "
      "so a program with no loop at all can still report UNKNOWN where it "
      "reported SUCCESSFUL; --no-vacuity-check turns it back off"},
+    {"llm-invariants",
+     NULL,
+     "Synthesise loop invariants with a language model: the command given by "
+     "--llm-command proposes invariants for every loop, and the claims they "
+     "fail are fed back to it. Implies --synthesise-loop-invariants, whose "
+     "havoc schema discharges them"},
+    {"llm-command",
+     boost::program_options::value<std::string>()->value_name("cmd"),
+     "Model command for --llm-invariants, run once per query and "
+     "split on spaces; it reads the conversation on stdin and writes its "
+     "answer to stdout, e.g. 'ollama run qwen2.5-coder'"},
+    {"llm-timeout",
+     boost::program_options::value<int>()->default_value(120)->value_name("s"),
+     "Seconds each model query may take"},
+    {"llm-max-rounds",
+     boost::program_options::value<int>()->default_value(3)->value_name("nr"),
+     "Model queries --llm-invariants makes before the "
+     "invariants found so far are kept"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
@@ -697,6 +715,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode every interleaving in one formula; it grows exponentially with "
      "--context-bound and gets no partial-order reduction"},
+    {"partial-order",
+     NULL,
+     "Encode concurrency as one formula that orders shared accesses, with no "
+     "context bound (prototype: accepts globals of scalar or array type, and "
+     "verifies no assumptions yet)"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
@@ -789,6 +812,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving",
      NULL,
      "Solve each VCC in parallel (this activates --multi-property)"},
+    {"parallel-solving-threads",
+     boost::program_options::value<int>()->value_name("n"),
+     "Solve at most n VCCs at once under --parallel-solving (default: one "
+     "per available CPU); each holds its own solver, so fewer threads use "
+     "less memory"},
     {"no-symmetry-breaking",
      NULL,
      "Disable recognising running max/min folds (e.g. over an uninitialised "

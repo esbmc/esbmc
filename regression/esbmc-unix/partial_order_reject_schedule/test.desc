@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --schedule
+^ERROR: --partial-order cannot be combined with --schedule$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

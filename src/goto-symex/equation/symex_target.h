@@ -24,7 +24,18 @@ public:
     OUTPUT,
     SKIP,
     RENUMBER,
-    BREANCHING
+    BREANCHING,
+    // --partial-order events (#10990): they add nothing to the formula
+    // themselves; the memory-model pass orders them.
+    SHARED_READ,
+    SHARED_WRITE,
+    SPAWN,
+    JOIN,
+    ATOMIC_BEGIN,
+    ATOMIC_END,
+    LOCK,
+    UNLOCK,
+    HALT
   };
 
   struct sourcet
@@ -45,7 +56,8 @@ public:
     }
   };
 
-  // write to a variable - lhs must be a symbol
+  // write to a variable - lhs must be a symbol. \p havoc_entry is nil unless
+  // the write is a loop-invariant havoc, where it is the value lhs held before.
   virtual void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
@@ -55,7 +67,8 @@ public:
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
-    unsigned loop_number) = 0;
+    unsigned loop_number,
+    const expr2tc &havoc_entry) = 0;
 
   // record output
   virtual void output(
@@ -90,6 +103,17 @@ public:
     std::vector<stack_framet> stack_trace,
     const sourcet &source,
     unsigned loop_number) = 0;
+
+  /// Record a --partial-order event. \p symbol is the SSA symbol a shared
+  /// read or write accesses, the thread id a spawn creates or a join waits
+  /// for, and nil for an atomic-section event or a halt. A write that updates
+  /// part of an object also reads it: \p old names the value it updates.
+  virtual void event(
+    const expr2tc &guard,
+    step_typet type,
+    const expr2tc &symbol,
+    const sourcet &source,
+    const expr2tc &old = expr2tc()) = 0;
 
   // Renumber the pointer object of a given symbol
   virtual void renumber(

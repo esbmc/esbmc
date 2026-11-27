@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --deadlock-check
+^ERROR: --partial-order does not support an assumption under --deadlock-check yet, at file .*main\.c line 6 
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

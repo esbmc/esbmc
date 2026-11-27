@@ -91,6 +91,7 @@
  */
 
 // Forward dec.
+class array_convt;
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
@@ -310,6 +311,16 @@ public:
 
   void pre_solve();
 
+  /** Convert @p expr, laying out the objects it first registers lazily:
+   *  their non-overlap constraints wait for assert_overlapping_layouts(). An
+   *  object a sliced step registers is mostly observed only through
+   *  int-to-pointer casts, so a model rarely overlaps it and most of those
+   *  quadratic constraints are never asserted (#10796). */
+  void convert_laid_out_lazily(const expr2tc &expr);
+  /** Assert the deferred non-overlap constraints the current model violates.
+   *  @return Whether any was asserted, i.e. whether the model is spurious. */
+  bool assert_overlapping_layouts();
+
   /** Get the satisfying assignment using the type.
    *  @param expr Variable to get the value of. Must be a symbol expression.
    *  @return Explicit assigned value of expr in the solver. May be nil, in
@@ -470,6 +481,8 @@ public:
     smt_astt left_ast,
     smt_astt right_ast,
     const expr2tc &expr);
+
+  smt_astt convert_extract(const extract2t &ex);
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -925,6 +938,7 @@ public:
   /** Convert a byte_update2tc using bitvector operations, preserving
    *  the original bitvector-based implementation. */
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
+  smt_astt convert_byte_update_as_bits(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
   /** The pointer, floating-point and struct legs of convert_bitcast, split
@@ -973,6 +987,10 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
+  /** As above, for an interface built for this solver, which it then owns. */
+  void set_tuple_iface(std::unique_ptr<tuple_iface> iface);
+  void set_array_iface(std::unique_ptr<array_convt> iface);
+  void set_fp_conv(std::unique_ptr<fp_convt> iface);
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
@@ -1037,10 +1055,52 @@ public:
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
-  /** Create and assert address space constraints on the given object ID
-   *  number. Essentially, this asserts that all the objects to date don't
-   *  overlap with /this/ one. */
-  void finalize_pointer_chain(unsigned int obj_num);
+  /** Assert that object @p obj_num overlaps none of the lower-numbered
+   *  objects. A freeable one among @p registered is kept apart only while
+   *  @p valid_objects, the `__ESBMC_alloc` version @p obj_num was registered
+   *  under, holds it alive. */
+  void finalize_pointer_chain(
+    unsigned int obj_num,
+    const expr2tc &valid_objects,
+    const std::unordered_set<unsigned int> &registered,
+    const std::unordered_set<unsigned int> &lazy);
+
+  /** A registered object, the `__ESBMC_alloc` version it was registered
+   *  under, the context level it was registered at, the one its layout was
+   *  asserted at, if it has been, and an address below which it and every
+   *  object registered before it fit side by side. */
+  struct object_layoutt
+  {
+    unsigned int obj;
+    expr2tc valid_objects;
+    unsigned int level;
+    std::optional<unsigned int> laid_out_at;
+    BigInt extent;
+    bool lazy;
+  };
+  /** Only a cast between a pointer and an integer reads an address, so the
+   *  quadratic non-overlap constraints wait for the first one (#9221), unless
+   *  the objects may not fit in the lower half of the address space without
+   *  them: there the constraints decide which paths are feasible. */
+  std::vector<object_layoutt> object_layouts;
+  /** The context level the layout was first needed at. */
+  std::optional<unsigned int> layout_needed_at;
+  /** Record object @p obj_num, which reserves at most @p reserved addresses,
+   *  and lay it out if the layout is needed. */
+  void register_layout(unsigned int obj_num, const BigInt &reserved);
+  void lay_out_objects();
+  /** A non-overlap constraint between two objects, one of them registered
+   *  lazily, asserted only once a model overlaps them. */
+  struct lazy_layoutt
+  {
+    unsigned int obj1;
+    unsigned int obj2;
+    expr2tc no_overlap;
+    unsigned int level;
+    std::optional<unsigned int> asserted_at;
+  };
+  std::vector<lazy_layoutt> lazy_layouts;
+  bool registering_lazily = false;
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
@@ -1316,6 +1376,13 @@ public:
   std::set<size_t> step_flattens;
   std::string step_assigned;
   expr2tc step_overwritten;
+  /** The pointer byte update the step stores, and where. */
+  expr2tc step_stored;
+  expr2tc step_stored_at;
+  /** The bits each pointer byte update stored, by where it stored them, and
+   *  the context level it was converted at. */
+  std::unordered_map<expr2tc, std::pair<smt_astt, unsigned int>, irep2_hash>
+    stored_pointer_bits;
   size_t flatten_count = 0;
   /** The flattens each SSA symbol's value may hold, and the context level it
    *  was recorded at. */
@@ -1379,6 +1446,11 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  // A solver's native interface is the solver itself, so only these are freed.
+  std::unique_ptr<tuple_iface> owned_tuple_api;
+  std::unique_ptr<array_convt> owned_array_api;
+  std::unique_ptr<fp_convt> owned_fp_api;
+
   expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
 
   double convert_rational_to_double(

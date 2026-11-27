@@ -4,6 +4,7 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 
@@ -170,6 +171,48 @@ irept mk_bv_hex_const(const irept &bv_type, const std::string &hex)
 irept mk_bv_const(const irept &bv_type, unsigned long long value)
 {
   return mk_bv_hex_const(bv_type, int_to_hex(value));
+}
+
+// Reads a raw CBMC integer constant. Values are hex strings at this point --
+// fix_expression's own constant branch is what later rewrites them to binary of
+// the type's width -- so parse base 16, and reject anything too wide for the
+// conversion rather than letting stoull throw.
+bool constant_uint(const irept &c, unsigned long long &out)
+{
+  if (c.id() != "constant")
+    return false;
+
+  const std::string v = c.find("value").id_string();
+  if (
+    v.empty() || v.size() > 16 ||
+    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+    return false;
+
+  out = std::stoull(v, nullptr, 16);
+  return true;
+}
+
+// The value of `allocate`'s zero-init flag when it is a literal: a bool or
+// integer constant, or the `k != 0` left by C's conversion of an integer
+// literal to __CPROVER_bool.
+bool constant_flag(const irept &flag, bool &value)
+{
+  const irep_idt &v = flag.find("value").id();
+  if (flag.id() == "constant" && (v == "true" || v == "false"))
+  {
+    value = v == "true";
+    return true;
+  }
+
+  unsigned long long lhs, rhs = 0;
+  const bool ne = flag.id() == "notequal" && flag.get_sub().size() == 2;
+  if (
+    !constant_uint(ne ? flag.get_sub()[0] : flag, lhs) ||
+    (ne && !constant_uint(flag.get_sub()[1], rhs)))
+    return false;
+
+  value = lhs != rhs;
+  return true;
 }
 
 // Hex of the `width`-bit mask that sets the low k bits of every 2k-bit block,
@@ -762,31 +805,45 @@ void fix_expression(irept &irep)
   {
     // CBMC's generic object allocation (remove_java_new.cpp:99-103): operands
     // are the byte size and a zero-initialise flag, and the type is already the
-    // result pointer. That is a malloc in all but name. The flag is false in
-    // every emitted instance because CBMC follows the allocation with its own
-    // zero-initialising assignment; a true flag would mean the fill is implicit
-    // and dropping it would leave the object nondet, so decline instead.
+    // result pointer. With the flag false that is a malloc in all but name. A
+    // true flag (CBMC's calloc, DFCC's write and object sets) becomes a call to
+    // ESBMC's calloc model, which lift_call_expressions hoists to a statement.
     const irept::subt ops = irep.get_sub();
     if (ops.size() != 2)
       throw std::string(
         "CBMC adapter: 'allocate' expects a size and a zero-init flag");
-    const std::string zero_flag = ops[1].find("value").id_string();
-    if (zero_flag != "false" && zero_flag != "0")
+    bool zero;
+    if (!constant_flag(ops[1], zero))
       throw std::string(
-        "CBMC adapter: zero-initialising 'allocate' is not yet supported on "
-        "the --binary path");
+        "CBMC adapter: 'allocate' with a zero-init flag that is not a literal "
+        "of at most 64 bits is not yet supported on the --binary path");
 
     irept size_arg(irep_idt("typecast"));
     size_arg.add("type") = static_cast<const irept &>(size_type());
     size_arg.get_sub().push_back(ops[0]);
-    fix_expression(size_arg);
 
     irep.id("sideeffect");
-    irep.add("statement") = mk("malloc");
     irep.get_sub().clear();
-    irep.get_sub().push_back(ops[0]);
-    irep.add("#size") = size_arg;
-    irep.add("#type") = static_cast<const irept &>(char_type());
+    if (zero)
+    {
+      irept calloc(irep_idt("symbol"));
+      calloc.set("identifier", "c:@F@calloc");
+      irept args(irep_idt("arguments"));
+      args.get_sub().push_back(mk_bv_const(size_arg.find("type"), 1));
+      args.get_sub().push_back(size_arg);
+
+      irep.add("statement") = mk("function_call");
+      irep.get_sub().push_back(calloc);
+      irep.get_sub().push_back(args);
+    }
+    else
+    {
+      fix_expression(size_arg);
+      irep.add("statement") = mk("malloc");
+      irep.get_sub().push_back(ops[0]);
+      irep.add("#size") = size_arg;
+      irep.add("#type") = static_cast<const irept &>(char_type());
+    }
   }
 
   if (
@@ -1006,7 +1063,11 @@ void fix_expression(irept &irep)
     // op0() reads an empty operand list and segfaults (same failure shape as
     // isnan/popcount).
     "forall",
-    "exists"};
+    "exists",
+    // goto-cc removes the comma operator from code but keeps it in a loop
+    // invariant.
+    "comma",
+    "unary+"};
 
   const std::string cur = irep.id_string();
 
@@ -1681,6 +1742,30 @@ bool fix_builtin_call(irept &code)
 
   const std::string callee = sub[1].find("identifier").id_string();
 
+  // _FORTIFY_SOURCE (on by default in the macOS SDK) turns these into
+  // __builtin___*_chk calls, which carry the destination's
+  // __builtin_object_size as a trailing argument and have no body here. Drop
+  // that argument: the copy's own bounds check already reports an overflow of
+  // the destination object. A call of any other arity is left bodyless.
+  static const std::unordered_map<std::string, std::pair<const char *, size_t>>
+    fortified = {
+      {"__builtin___memcpy_chk", {"c:@F@__ESBMC_memcpy", 4}},
+      {"__builtin___memmove_chk", {"c:@F@__ESBMC_memmove", 4}},
+      {"__builtin___memset_chk", {"c:@F@__ESBMC_memset", 4}},
+      {"__builtin___strcpy_chk", {"c:@F@strcpy", 3}},
+      {"__builtin___strncpy_chk", {"c:@F@strncpy", 4}},
+      {"__builtin___strcat_chk", {"c:@F@strcat", 3}},
+      {"__builtin___strncat_chk", {"c:@F@strncat", 4}}};
+  auto chk_it = fortified.find(callee);
+  if (
+    chk_it != fortified.end() &&
+    sub[2].get_sub().size() == chk_it->second.second)
+  {
+    code.get_sub()[1].set("identifier", chk_it->second.first);
+    code.get_sub()[2].get_sub().pop_back();
+    return false;
+  }
+
   // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that
   // performs the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET
   // OTHER-instructions, which ESBMC's symex has no handler for and silently
@@ -2033,25 +2118,6 @@ bool rewrite_array_copy_call(irept &code, const irep_idt &stmt)
   return true;
 }
 
-// Reads a raw CBMC integer constant. Values are hex strings at this point --
-// fix_expression's own constant branch is what later rewrites them to binary of
-// the type's width -- so parse base 16, and reject anything too wide for the
-// conversion rather than letting stoull throw.
-bool constant_uint(const irept &c, unsigned long long &out)
-{
-  if (c.id() != "constant")
-    return false;
-
-  const std::string v = c.find("value").id_string();
-  if (
-    v.empty() || v.size() > 16 ||
-    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
-    return false;
-
-  out = std::stoull(v, nullptr, 16);
-  return true;
-}
-
 // Guards against building a pathological conjunction for a huge array; such a
 // comparison is beyond BMC anyway, and declining beats exhausting memory.
 const unsigned long long array_equal_max_elements = 4096;
@@ -2191,6 +2257,55 @@ const char *rewrite_whole_object_codet(
     "' whole-object operations are not yet supported on the --binary path");
 }
 
+// __CPROVER_loop_entry(e) and __CPROVER_old(e), which ESBMC cannot express.
+bool uses_history_variable(const irept &i)
+{
+  if ((i.id() == "loop_entry" || i.id() == "old") && !i.get_sub().empty())
+    return true;
+  for (const auto &s : i.get_sub())
+    if (uses_history_variable(s))
+      return true;
+  for (const auto &p : i.get_named_sub())
+    if (uses_history_variable(p.second))
+      return true;
+  return false;
+}
+
+// goto-cc and Kani keep a loop's invariant as a comment on its back edge's
+// guard, which fix_expression does not visit. Only the loop-invariant modes
+// read it, so leave it alone otherwise. Dropping an invariant is sound: the
+// loop is then handled as if it had none.
+void lift_loop_invariant(const irept &guard, irept &instruction)
+{
+  const irept &invariant = guard.find("#spec_loop_invariant");
+  if (
+    invariant.is_nil() ||
+    !(config.options.get_bool_option("loop-invariant") ||
+      config.options.get_bool_option("loop-invariant-check") ||
+      config.options.get_bool_option("synthesise-loop-invariants")))
+    return;
+
+  if (uses_history_variable(invariant))
+  {
+    log_warning(
+      "CBMC adapter: ignoring a loop invariant that uses "
+      "__CPROVER_loop_entry or __CPROVER_old");
+    return;
+  }
+
+  irept fixed = invariant;
+  try
+  {
+    fix_expression(fixed);
+  }
+  catch (const std::string &e)
+  {
+    log_warning("CBMC adapter: ignoring a loop invariant: {}", e);
+    return;
+  }
+  instruction.add("loop_invariant") = fixed;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
@@ -2259,6 +2374,7 @@ irept instruction_to_esbmc_irep(
   result.add("function") = mk(function_name);
 
   fix_expression(result);
+  lift_loop_invariant(ins.guard, result);
 
   // fix_expression is what turns java_new_array_data into a marked malloc, so
   // the extent is only visible now. Record it against the payload symbol for

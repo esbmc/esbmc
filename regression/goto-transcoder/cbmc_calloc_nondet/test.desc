@@ -1,0 +1,4 @@
+CORE
+cbmc_calloc_nondet.goto
+--binary --unwind 9
+^VERIFICATION SUCCESSFUL$

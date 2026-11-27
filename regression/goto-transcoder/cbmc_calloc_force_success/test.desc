@@ -1,0 +1,4 @@
+CORE
+cbmc_calloc_force_success.goto
+--binary --force-malloc-success
+^VERIFICATION SUCCESSFUL$

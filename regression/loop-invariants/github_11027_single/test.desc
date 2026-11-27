@@ -1,0 +1,7 @@
+CORE
+main.c
+--loop-invariant-check
+^  idx = 3 
+^Violated property:\n.*\n  top: x==1$
+^\s+FAILED\s+\[main\.assertion\.3\]\s+line\s+11\s+top: x==1$
+^VERIFICATION FAILED$

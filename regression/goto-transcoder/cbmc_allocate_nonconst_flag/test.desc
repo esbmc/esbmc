@@ -1,0 +1,4 @@
+CORE
+main.goto
+--binary
+^ERROR: CBMC adapter: 'allocate' with a zero-init flag that is not a literal of at most 64 bits is not yet supported on the --binary path$

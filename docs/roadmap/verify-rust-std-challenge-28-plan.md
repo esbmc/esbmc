@@ -1,6 +1,8 @@
 # Plan: Solving verify-rust-std Challenge 28 (flt2dec) with ESBMC
 
-**Status (2026-11-22):** proposed. Nothing in this plan has been run yet.
+**Status (2026-11-24):** the Phase 1 gate failed (see §9). Per §5, we do not compete
+for the bounty as planned. Phase 0 is half done: ESBMC v8.8 is released, and the
+committee has not yet answered on #524.
 
 **Related:** [`cprover-support-roadmap.md`](cprover-support-roadmap.md) (how ESBMC
 reads Kani's CBMC goto-binaries), the challenge text
@@ -144,7 +146,7 @@ issues are likely to show up here:
 - **esbmc#10940 / esbmc#10951.** `digits_to_dec_str` and `digits_to_exp_str` fill a
   `[MaybeUninit<Part>]` slice and return it through `assume_init_ref`
   (`flt2dec/mod.rs:181-304`). Whether this hits the union-read bug is inferred,
-  not measured.
+  not measured. Both issues are fixed in v8.8 (esbmc#10953).
 
 ### Phase 3: harnesses and contracts (weeks 3 to 6)
 
@@ -194,6 +196,55 @@ so reviewers do not have to find them.
 
 The estimate is 6 to 7 weeks if the Phase 1 gate passes cleanly and 9 weeks if
 Dragon needs the compositional route. It does not include review rounds.
+
+## 9. Phase 1 result (2026-11-24)
+
+**The gate failed.** No unstubbed Grisu harness finished, even at four times the
+900 s budget.
+
+Setup: four harnesses on verify-rust-std main `1feeadd`, built with the CI's Kani pin
+(`9834c96ce9`). They call `format_shortest_opt` and `format_exact_opt` on
+`decode(kani::any::<f32 | f64>())`, restricted to finite values, with no stubs and no
+assumption on a digit or an index. ESBMC v8.8 ran on the sweep machine (r7a.16xlarge),
+one core and 15 GB per run.
+
+| Round | Configuration | Shortest | Exact |
+|---|---|---|---|
+| 1 | BMC `--unwind 30` (multi-property), incremental BMC, k-induction; 900 s | all time out; per-claim solving at about 40 s a claim | symex does not finish (1024-byte buffer) |
+| 2 | one combined solve, {Bitwuzla, Z3} x {plain, `--interval-analysis`}; 3,600 s | Bitwuzla times out; Z3 exceeds 15 GB | symex does not finish (17-byte buffer) |
+| 3 | round 2, plus `round_and_weed`'s loop bounded at 10; 3,600 s | formula 3.4x smaller (14,932 VCCs, symex 40 s); both solvers time out | not run |
+
+What we learned:
+
+- In shortest mode, `round_and_weed`'s loop (`grisu.rs:422`) is inlined at every exit of
+  the unwound digit loops. Its `debug_assert!` caps it at 8 iterations, so a bound of 10
+  is sound with unwinding assertions on. That bound shrinks the formula, but the solve is
+  still over an hour. What remains is the arithmetic every competing PR stubs or assumes:
+  the 64x64-bit product in `Fp::mul` and the division by a symbolic `ten_kappa`.
+- In exact mode, `round_up` calls `fill` at a symbolic offset with a symbolic length.
+  ESBMC lowers that to the `__memset_impl` loop, which unwinds to the `--unwind` bound
+  rather than to the object's size (esbmc#10991). esbmc#11018 models such a fill
+  without the loop.
+- `--show-loops` lists the Rust loops only when it gets the same
+  `--report-property-class` or `--ignore-property-class` options as the verification
+  run. Without them, Kani's `assert(false)` reachability checks make the rest of the
+  harness unreachable, and the loops are removed before they are listed (esbmc#11008,
+  closed). With them, `--unwindset` bounds a Rust loop by number.
+
+A per-claim run (`--claim N`, one process per claim, 900 s each) on the f64 shortest
+harness with the round-3 options shows where the cost sits. Of the 111 claims in
+flt2dec, `diy_float` and the harness, 100 were proven (median 85 s, 90th percentile
+304 s). They include every `Fp::mul` overflow check and the digit bound
+`debug_assert!(q < 10)` (`grisu.rs:321`, 216 s), which every competing PR assumed.
+The 11 that timed out are the `buf[i]` index check (`grisu.rs:322`), `*last > b'0'`,
+and nine overflow checks on the `plus1`/`threshold`/`ulp` arithmetic in the digit loop
+and `round_and_weed`. These results hold within `--unwind 30` and the weed bound of 10.
+
+So the hard part is narrow: the remaining claims are the `buf[i]` index check and the
+overflow checks on the error-bound arithmetic, not the multiply or the digit value. A
+compositional proof of Grisu would need loop invariants for those claims. Following
+§8, the useful contributions are the ESBMC fix for esbmc#10991 (esbmc#11018) and these
+measurements, which can go to the #596 author.
 
 ## 8. Decisions to take
 

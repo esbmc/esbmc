@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a thread id stored in a global yet, at file .*main\.c line 10 
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

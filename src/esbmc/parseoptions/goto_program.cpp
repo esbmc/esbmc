@@ -619,11 +619,11 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 
 static constexpr std::string_view kani_prefix = "__KANI_";
 
-// Whether `path` is a CBMC goto-binary written by Kani. Kani names its helper
-// symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the name sits in
-// the binary's string table; a goto-cc binary with such an identifier or string
-// matches too. A match only selects the default strategy.
-static bool is_kani_binary(const std::string &path)
+// Whether `path` is a CBMC goto-binary whose string table holds `marker`. A
+// match only selects a default strategy; a string or identifier that merely
+// spells `marker` matches too.
+static bool
+cbmc_binary_mentions(const std::string &path, std::string_view marker)
 {
   std::ifstream in(path, std::ios::in | std::ios::binary);
   unsigned char hdr[4] = {0, 0, 0, 0};
@@ -632,7 +632,6 @@ static bool is_kani_binary(const std::string &path)
     in.gcount() < static_cast<std::streamsize>(sizeof(hdr)) ||
     !is_cbmc_goto_magic(hdr))
     return false;
-  const std::string marker(kani_prefix);
   std::string window;
   char buf[1 << 16];
   while (in.read(buf, sizeof(buf)) || in.gcount() > 0) // Flawfinder: ignore
@@ -648,9 +647,9 @@ static bool is_kani_binary(const std::string &path)
 
 // Kani runs CBMC with --no-malloc-may-fail (kani#891), under which neither
 // malloc nor realloc returns NULL; a constant size above the object-size limit
-// still yields NULL (memory_alloc.cpp). Unlike is_kani_binary, a string does
-// not match: a symbol must carry the __KANI_ name, and identifiers starting
-// with two underscores are reserved (C11 7.1.3).
+// still yields NULL (memory_alloc.cpp). Unlike has_kani_binary_input, a string
+// does not match: a symbol must carry the __KANI_ name, and identifiers
+// starting with two underscores are reserved (C11 7.1.3).
 static void default_kani_allocation(
   bool cbmc_binary,
   const contextt &context,
@@ -668,10 +667,26 @@ static void default_kani_allocation(
   options.set_option("force-realloc-success", true);
 }
 
-bool esbmc_parseoptionst::has_kani_binary_input()
+static bool
+any_binary_mentions(const cmdlinet &cmdline, std::string_view marker)
 {
   return cmdline.isset("binary") &&
-         std::any_of(cmdline.args.begin(), cmdline.args.end(), is_kani_binary);
+         std::any_of(
+           cmdline.args.begin(), cmdline.args.end(), [marker](const auto &p) {
+             return cbmc_binary_mentions(p, marker);
+           });
+}
+
+// Kani names its helper symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two).
+bool esbmc_parseoptionst::has_kani_binary_input()
+{
+  return any_binary_mentions(cmdline, kani_prefix);
+}
+
+// The CBMC adapter reads a loop contract from this back-edge attribute.
+bool esbmc_parseoptionst::has_loop_invariant_binary_input()
+{
+  return any_binary_mentions(cmdline, "#spec_loop_invariant");
 }
 
 // CBMC tags each ASSERT with a property class in its location. Kani's
@@ -705,8 +720,9 @@ skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions)
 // type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
-// (goto-symex/engine/symex_function.cpp). The string bodies are byte loops, so
-// a call with a symbolic length needs an `--unwind` bound like any other loop.
+// (goto-symex/engine/symex_function.cpp). The string bodies, and calloc's zero
+// fill, are byte loops, so a call with a symbolic length needs an `--unwind`
+// bound like any other loop.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
@@ -722,7 +738,7 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
     "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
     "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
-    "strtol"};
+    "strtol",        "calloc"};
 
   for (const char *name : libc)
   {
@@ -873,6 +889,8 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    // Also the target of cbmc_adapter's zero-initialising `allocate`.
+    "  (void *)calloc,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)__cbmc_array_copy_impl, (void *)__cbmc_array_replace_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"

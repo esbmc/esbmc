@@ -34,8 +34,15 @@ Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 Its merge with master `6c3c2cf9d` keeps them too, and the whole `esbmc/`
 ctest label under Bitwuzla fails only the tests that fail on master
 (§8.35). So does its merge with master `3194304fb`, which adds #10901's
-member lookup through a `byte_extract` (§8.36). Phases 0-2 are on master; the SV-COMP
-run that Phases 1 and 2 require is still open, and Phase 3 waits for it.**
+member lookup through a `byte_extract` (§8.36). Phases 0-2 are on master. The SV-COMP
+run (§8.37, master `e523eb04c8`, T=100 s) lost no correct verdict on one
+host and made no wrong one, so the Phase 2 gate is met on soundness. It is
+not met on timing: the flag costs about 14-18% CPU where it splits a struct,
+and three near-limit tasks may time out under suite load (§8.37). Phase 3
+may start with that exception recorded.**
+> Phase 3, first part (nested structs; arrays of structs are not started, and
+> k-induction havoc already goes through member chains, §8.42): a struct member of a split object is split in turn,
+> up to 4096 leaves per object (§8.38). The gate is not met: see §8.38.
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2384,3 +2391,197 @@ cloned with git), 4-core container.
   `VERIFICATION SUCCESSFUL` in 87.4 s, 85.7 s of it in Bitwuzla, against
   the 120 s cap.
 - Still open for the Phase 2 gate: an SV-COMP run.
+
+### 8.37 Phase 2: SV-COMP run, flag off against flag on
+
+Master `e523eb04c8`, one build copied to two hosts, SV-COMP 2027 C suite at
+T=100 s, 39,204 runs per arm. Arm A has the flag off, arm B has
+`--field-sensitive-ssa`. The hosts were not equally fast: on tasks the flag
+did not touch, arm B's host used 5.5% less CPU.
+
+| | Score | Correct | Wrong |
+|---|---|---|---|
+| Arm A | 44,102 | 27,047 | 15 |
+| Arm B | 44,233 | 27,155 | 15 |
+
+- The change is in `no-overflow` (+67 correct) and `unreach-call` (+41).
+  The other run sets are identical.
+- 126 tasks changed category: 117 gained a verdict, 9 lost one, none became
+  wrong.
+- Of the 9 losses, 8 had no struct split, so both arms solved the same
+  formula and the difference is host timing; two are threaded `pthread-wmm`
+  programs, where the flag disables itself. The ninth,
+  `softsign_w64_r1_case_0_unsafe`, split a struct and went from 93.7 s to
+  just over 100 s although every phase ESBMC times was faster.
+- Of the 117 gains, 79 had a struct split. They include 68 Juliet
+  `int_fgets` no-overflow tasks, which the split brings to about 48 s, inside
+  the wrapper's 60 s k-induction budget. The other 38 gains are noise.
+- Corrected for host speed, the flag costs about 14-18% CPU on tasks where
+  it splits a struct (8.1% median, 11.6% geometric mean as measured).
+
+Same-host rerun on `benchexec-root-2`, rounds interleaved A1 B1 A2 B2 A3 B3,
+12 tasks plus 52 filler tasks per round to keep 64 concurrent runs. The
+filler's B/A CPU median is 1.000 over 156 pairs, so the host did not drift.
+A task counts as lost if the flag fails to solve it in at least 2 of 3
+rounds while flag-off solves it in all 3 (fixed before the rerun).
+
+| Task | Role | Verdict A / B | B/A CPU |
+|---|---|---|---|
+| `softsign_w64_r1_case_0_unsafe` | suspect | false 3/3, 3/3 | 1.105 |
+| `algorithm90_unique` | suspect | false 3/3, 3/3 | 1.022 |
+| `list_clear_bug` | suspect | false 3/3, 3/3 | 1.023 |
+| `epat.ko`, `pg.ko`, `aws_linked_list_remove_harness_negated`, `synaptics_usb.ko`, `aws_hash_table_clean_up_harness`, `list_end_bug` | gain | same 3/3, 3/3 | 1.00-1.03 |
+| `vector17` | gain | false 3/3, 3/3 | 0.904 |
+| `algorithm107`, `gcd_1+newton_3_6` | control | same 3/3, 3/3 | 1.026, 1.006 |
+
+- No suspect is lost under the rule: the flag solves each in 3 of 3 rounds.
+- The rerun ran 12-20% faster than the full suite (`softsign` flag-off took
+  78 s against 93.7 s), so it did not recreate the near-limit condition.
+  Scaled to the suite's timings, `softsign` lands at about 103.5 s,
+  `list_clear_bug` at about 101.1 s and `algorithm90_unique` at about
+  99.9 s. Under suite load, up to three correct verdicts could time out, and
+  up to seven of the split gains could disappear.
+- `softsign` costs 10.5% more CPU with the flag, about 9 s in every round;
+  `vector17` is 10% faster, so that gain is not noise.
+
+Gate: no wrong verdict in either arm, and no lost correct verdict on equal
+hardware. Not measured: a full-suite run with both arms on one host.
+
+### 8.38 Phase 3, part 1: nested structs (draft, gate not met)
+
+A struct member of a split object is itself split, recursively, with field
+ids `<object id>::<k>::<j>`; the cap is 4096 leaves per top-level object, and
+above it nested members stay whole as in Phase 2. A member chain over a split
+object reads the leaf, a whole read builds nested `constant_struct`s, and
+`symex_assign_split` assigns the leaves. The pointer scan accepts a member
+chain of any length over a dereference.
+
+Measured on a build with Z3 only (Bitwuzla's dependencies are not installed in
+the sandbox), RelWithDebInfo, flag forced on in each `test.desc` command, 30 s
+per run, compared with a build of master `b28844fbb`:
+
+| Suite | Tests run | Verdict changes against flag off | Verdict changes against master with the flag |
+|---|---|---|---|
+| C (`regression/esbmc`) CORE, tests not passing the flag themselves | 2272 | 0 | 0 |
+| C++ (`esbmc-cpp/cpp`) CORE | 970 | 0 | 0 |
+
+The runs stopped at a 540 s budget, so 1375 C and 399 C++ tests were not run.
+Output differences against master (78 C, 45 C++) are uuid and timestamp lines
+in witnesses and k-induction or parallel-solving order; the ones sampled in
+C++ and C were of those kinds, not all were inspected.
+Four new tests (`field_sensitive_ssa_nested_*`) pin the split count, which
+master does not reach (3 objects against 9), and the verdict.
+
+Corpus rows, Z3 4.13.3 (Ubuntu 24.04 packages), RelWithDebInfo build of this
+branch, one run each, `test.desc` options without `--smtlib`, 60 s limit,
+flag on: every row verifies and w2048 is within 2x of w8 (global_callee 0.4 s
+against 0.4 s, local_addr_once 0.2 s against 0.2 s, local_writes 0.2 s against
+0.3 s, plc_db 0.5 s against 0.4 s, repro7521 1.3 s against 0.8 s). With the
+flag off, plc_db_w512 and plc_db_w2048 hit the 60 s limit. Phase 3 adds no
+nested struct to these rows, so this checks that it did not regress them.
+
+Unmet gates, not measured: the Python suite (Python objects are not split, 613
+tests ran with no change), Bitwuzla (not installable here),
+the k-induction suite, the unreachability harnesses for each new branch,
+the assert-enabled build, and the SV-COMP run. Arrays of structs and k-induction
+havoc of field symbols remain to be done.
+
+### 8.39 Phase 3, part 1: further measurement on master `d1961c8cf`
+
+Part 1 (§8.38) merged as #11025 with its gate open. This run measured more of
+it on a Z3-only RelWithDebInfo build (Bitwuzla's dependencies are not
+installed in the sandbox), flag forced on by wrapping the binary, ctest
+`--timeout 40` to `60`.
+
+- The 81 `field.sensitiv*` tests pass with the flag off.
+- C (`regression/esbmc` label), flag on: 2285 of 3805 tests ran, about 1500 did
+  not. No verdict changed, with these notes:
+  - The 40 `field_sensitive_ssa_*` tests fail under the wrapper only because
+    they pass the flag themselves.
+  - 02_eureka23, gcc_popcount_01, github_10913, github_10913_two_inputs,
+    github_1172-3, github_1352-32bit, github_1352-fail-32bit,
+    github_1352-success-32bit, github_302, github_306, github_536_boolector,
+    github_8706 and github_8706_fail fail on master without the flag in this
+    sandbox. builtin_overflow_generic, gcse, github_10774_symbolic_fixedbv and
+    github_2513 time out at 60 s with the flag on and off.
+  - Trace text: `counterexample_unresolved_component_fail` (`--no-slice`)
+    prints `h.p = &x` with the flag where flag-off prints
+    `h.p = { .p=&x, .t=0 }`. The verdict and the other steps are the same.
+    This is a trace change under the flag that §8.6 does not list; it needs a
+    decision (accept it in §8.6 or fix it) before Phase 3 is declared done.
+- ctest does not kill an `esbmc` child on a test timeout; the orphans starve
+  later tests, so after a timed-out run kill them before measuring again.
+
+Not run: C++ and Python suites, the remaining C tests, Bitwuzla, the corpus
+2x bar, k-induction, the unreachability harnesses, the assert-enabled build
+and SV-COMP. Arrays of structs and k-induction havoc are not started. The
+Phase 3 gate stays unmet.
+
+### 8.40 Phase 3, part 1: the `h.p` trace difference and the k-induction suite
+
+Z3-only RelWithDebInfo build of `4c310985a`, 30 s per run.
+
+- `counterexample_unresolved_component_fail` (§8.39): `h` is flat
+  (`int *p; int t;`), so nesting plays no part. With the flag the step prints
+  `h.p = &x`; without it, `h.p = { .p=&x, .t=0 }`. The value of `h.p` is `&x`
+  in both, so Invariant 4 holds. This is the first row of §8.6 (a member
+  write prints the member where master prints the whole struct), pinned by
+  `field_sensitive_ssa_print_member_fail`. Decision: accepted under that row;
+  no code change.
+- k-induction: every test of `regression/k-induction` (316) and
+  `regression/k-induction-parallel` (78), run with and without the flag
+  (options from `test.desc`, solver Z3), gives the same verdict lines, 394 of
+  394. Tests that pass the flag themselves are skipped (none here).
+
+Not measured: the C and C++ tests beyond §8.38 and §8.39, the Python suite
+with the flag forced on, Bitwuzla, the corpus 2x bar under Bitwuzla,
+the unreachability harnesses, the assert-enabled build and SV-COMP. Arrays of
+structs and k-induction havoc of field symbols are not started. The Phase 3
+gate stays unmet.
+
+### 8.41 Phase 3, part 1: C and C++ on master `7a0712557`
+
+Z3-only RelWithDebInfo build of master `7a0712557` merged into this branch
+(Bitwuzla's dependencies are not installed in the sandbox, nor is Boolector).
+The flag was forced on by a wrapper script around the binary; ctest
+`--timeout 60`, `-j4`, each run capped at 590 s.
+
+- C, `regression/esbmc/`, test numbers 3000 up: 829 started, 823 passed. The
+  six failures (`overflow_10_fir`, `overflow_16_fir_new`,
+  `tuple_const_array_*`) pass `--boolector`, which this build lacks; they
+  fail the same way with the flag off.
+- C, test numbers 1 to 2999: the run reached 1401 of 2999 tests, 1349 passed.
+  Of the 11 failures that are not `field_sensitive_ssa_*` (those pass the flag
+  themselves), 10 fail identically with the flag off. The eleventh,
+  `counterexample_unresolved_component_fail`, is the §8.40 `h.p` row.
+- C++, `esbmc-cpp/cpp` label: 494 of 1482 started, 483 passed. The failures
+  are `ch8_5`, which fails with the flag off, and the six
+  `field_sensitive_ssa_*` tests that pass the flag themselves.
+
+No verdict changed with the flag on in any test that ran. About 1600 C and
+about 990 C++ tests did not run in the budget.
+
+Not measured: the rest of the C and C++ tests, the Python suite, Bitwuzla,
+the corpus 2x bar, the unreachability harnesses, the assert-enabled build,
+SV-COMP. Arrays of structs and k-induction havoc are not started. The Phase 3
+gate stays unmet.
+
+### 8.42 Phase 3: k-induction havoc and arrays of structs on master `170a23e993`
+
+Z3-only RelWithDebInfo build of master `170a23e993` (the sandbox needed
+`libboost-*-dev`, `bison`, `flex` and `libc6-dev-i386` for the 32-bit libc
+model; the build takes about 35 minutes on 4 cores).
+
+- `havoc_targets` (`goto_k_induction.cpp:452`) already replaces a symbol that a
+  loop writes only through member chains by those chains, so the Phase 3
+  k-induction item has no separate havoc to add for split objects. One program
+  (a loop incrementing `s.a` of a split `struct { int a; int b; int c[3]; }`,
+  asserting `s.b == 5`) gives the same verdict, "successful by the inductive
+  step at k = 2", with and without the flag, and the flag splits `s`. No
+  other k-induction program was run in this entry; §8.40 has the suite.
+- An array of structs indexed by constants (`struct P a[3]`) is not split:
+  `splittable` (`split_structs.cpp`) accepts struct-typed objects only.
+  This is the remaining Phase 3 item, and it is not started.
+
+Not measured: everything else the Phase 3 gate lists, as in §8.41. The Phase 3
+gate stays unmet.

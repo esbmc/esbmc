@@ -402,6 +402,12 @@ public:
 
   void guard_by_interleaving(expr2tc &expr) const override;
 
+  /** --partial-order: a loop or recursion past its bound, or a failed
+   *  assumption, ends the thread with a HALT event, since the other threads,
+   *  which come later in the equation, may run before it. --deadlock-check
+   *  keeps the assumption, as its claim counts a halted thread as finished. */
+  bool halt_thread_at_bound(const expr2tc &cond) override;
+
   /**
    *  True iff every thread in this schedule has reached a terminal state,
    *  i.e. has either ended or has an empty call stack. This is the precondition
@@ -461,6 +467,80 @@ public:
    *  @param expr Container of expression possibly touching global state.
    */
   void analyze_read(const expr2tc &expr);
+
+  /** --partial-order (#10990): give every shared global \p instruction reads
+   *  a fresh, unconstrained L2 name, recorded as a SHARED_READ event, so the
+   *  memory-model pass can choose which write it observes. */
+  void record_shared_reads(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: record the L2 name an assignment to a shared global
+   *  defines as a SHARED_WRITE event. */
+  void record_shared_write(const expr2tc &code);
+
+  /** --partial-order: assign to an element of a shared array, or through a
+   *  pointer that may reach a shared global, as an update of each object
+   *  written, whose old value is a fresh L2 name the memory model ties to
+   *  the latest write. Returns false if \p code writes no such object. */
+  bool partial_order_update(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard);
+
+  /** --partial-order: the shared globals, at L0, that dereferencing \p ptr
+   *  may reach. */
+  std::set<expr2tc> shared_pointees(const expr2tc &ptr);
+
+  /** --partial-order: give the shared global \p sym a fresh, unconstrained
+   *  L2 name and return it. */
+  expr2tc fresh_shared_value(expr2tc sym);
+
+  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid,
+   *  under the current guard and, if not nil, \p cond. */
+  void record_thread_event(
+    symex_targett::step_typet type,
+    unsigned int tid,
+    const expr2tc &cond = expr2tc());
+
+  /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
+   *  atomic section in user code, opened by __ESBMC_atomic_begin or
+   *  __ESBMC_really_atomic_begin. */
+  void record_atomic_event(
+    symex_targett::step_typet type,
+    const goto_programt::instructiont &instruction);
+
+  /** Run a function call, or its --partial-order replacement. */
+  void symex_call(
+    reachability_treet &art,
+    const goto_programt::instructiont &instruction);
+
+  /** --partial-order: replace a pthread_join call by a JOIN event. The
+   *  operational model's join waits for the thread to end, which never
+   *  happens here because the thread runs after its joiner in the equation.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_join(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: replace a pthread_mutex_lock or pthread_mutex_unlock
+   *  call by a LOCK or UNLOCK event on its mutex, which the memory model
+   *  orders in place of the operational model's wait, and a
+   *  pthread_cond_wait by an UNLOCK and a LOCK of its mutex.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_mutex(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: a lock may wait forever, as on a mutex its holder
+   *  never releases. The thread then halts before the lock, and the other
+   *  threads run on, so their earlier violations stay reachable. */
+  void wait_forever_at_lock();
+
+  /** --partial-order: end the path at a pthread_exit call, or at a call to
+   *  __ESBMC_terminate_thread in user code. The operational model ends it
+   *  with an assumption, which would also hold every other thread's later
+   *  claims, since they follow it in the equation, and the intrinsic ends the
+   *  thread on every path, not only the one that calls it.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_exit(const goto_programt::instructiont &instruction);
+
+  /** Assign 0 to what \p call returns into, if anything. */
+  void return_zero(const code_function_call2t &call);
 
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */
@@ -762,6 +842,11 @@ protected:
    *  thread's goto_symex_statet, so the option is looked up once per run
    *  rather than once per thread creation. */
   bool no_propagation;
+  /** --partial-order: run each thread to completion and record its shared
+   *  accesses as events instead of offering context switches. */
+  bool partial_order;
+  /** --partial-order: how many locks have a choice to wait forever. */
+  unsigned lock_waits = 0;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's

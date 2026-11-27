@@ -43,6 +43,7 @@ extern "C"
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/partial_order_scope.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -185,6 +186,77 @@ static bool schedule_conflicts(const cmdlinet &cmdline)
   return true;
 }
 
+/// --partial-order runs each thread once and lets the solver order the shared
+/// accesses (#10990), so the interleaving explorers, the unwinding strategies
+/// and the checks that need a scheduler are out of its scope.
+static bool partial_order_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("partial-order"))
+    return false;
+
+  for (const char *incompatible :
+       {"schedule",
+        "incremental-context-bound",
+        "state-hashing",
+        "k-induction",
+        "k-induction-parallel",
+        "incremental-bmc",
+        "falsification",
+        "termination",
+        "data-races-check-only",
+        "lock-order-check",
+        "atomicity-check",
+        "ltl",
+        "interactive-ileaves"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error("--partial-order cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
+{
+  return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
+}
+
+/// --llm-invariants runs the --synthesise-loop-invariants pipeline with a
+/// model as the synthesiser, so it sets that flag and inherits every
+/// implication and conflict check made on it.
+static bool select_loop_synthesiser(cmdlinet &cmdline)
+{
+  if (!cmdline.isset("llm-invariants"))
+  {
+    if (cmdline.isset("llm-command"))
+    {
+      log_error("--llm-command needs --llm-invariants");
+      return true;
+    }
+    return false;
+  }
+#ifndef ENABLE_LLM
+  log_error("--llm-invariants needs a build with -DENABLE_LLM=On");
+  return true;
+#endif
+  if (
+    !cmdline.isset("llm-command") ||
+    std::string(cmdline.getval("llm-command")).find_first_not_of(' ') ==
+      std::string::npos)
+  {
+    log_error("--llm-invariants needs --llm-command");
+    return true;
+  }
+  for (const char *count : {"llm-timeout", "llm-max-rounds"})
+    if (atoi(cmdline.getval(count)) < 1)
+    {
+      log_error("--{} must be at least 1", count);
+      return true;
+    }
+  cmdline.set("synthesise-loop-invariants", std::string(), {""});
+  return false;
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -303,7 +375,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (parallel_solving_conflicts(cmdline))
     return true;
 
-  if (schedule_conflicts(cmdline))
+  if (concurrency_mode_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
@@ -376,9 +448,11 @@ static bool proof_cache_flags_usable(const optionst &options)
 // A Kani harness verifies by k-induction unless the run asks for something
 // else: a strategy or a bound, a report, coverage, dead-code or print-only
 // mode, or witness validation. The flags go on the command line, so the options
-// k-induction implies and the checks that refuse it apply as usual. Unlimited k
-// steps keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC
-// would find it.
+// they imply and the checks that refuse them apply as usual. Unlimited k steps
+// keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC would
+// find it. A harness whose binary carries a loop contract instead cuts each
+// such loop at its invariant; k steps stay bounded there, because a claim past
+// a too-weak invariant stays UNKNOWN at every k.
 void esbmc_parseoptionst::default_kani_strategy()
 {
   static const char *const chosen[] = {
@@ -394,6 +468,7 @@ void esbmc_parseoptionst::default_kani_strategy()
     "inductive-step",
     "loop-invariant",
     "synthesise-loop-invariants",
+    "llm-invariants",
     "incremental-context-bound",
     "multi-property",
     "report-property-class",
@@ -424,12 +499,21 @@ void esbmc_parseoptionst::default_kani_strategy()
       return;
   if (ts_strategy_requested() || !has_kani_binary_input())
     return;
-  log_status("Kani goto-binary: verifying by k-induction");
-  cmdline.set("k-induction", std::string(), {""});
-  if (cmdline.vm["max-k-step"].defaulted())
-    cmdline.set("unlimited-k-steps", std::string(), {""});
-  if (cmdline.vm["max-inductive-step"].defaulted())
-    cmdline.set("max-inductive-step", 3, {"3"});
+  if (has_loop_invariant_binary_input())
+  {
+    log_status("Kani goto-binary: verifying loop contracts by incremental BMC");
+    cmdline.set("loop-invariant-check", std::string(), {""});
+    cmdline.set("incremental-bmc", std::string(), {""});
+  }
+  else
+  {
+    log_status("Kani goto-binary: verifying by k-induction");
+    cmdline.set("k-induction", std::string(), {""});
+    if (cmdline.vm["max-k-step"].defaulted())
+      cmdline.set("unlimited-k-steps", std::string(), {""});
+    if (cmdline.vm["max-inductive-step"].defaulted())
+      cmdline.set("max-inductive-step", 3, {"3"});
+  }
 }
 
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
@@ -444,6 +528,21 @@ void esbmc_parseoptionst::default_kani_strategy()
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::do_partial_order(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (!partial_order_in_scope(
+        goto_functions,
+        namespacet(context),
+        !options.get_bool_option("program-only"),
+        options.get_bool_option("data-races-check"),
+        options.get_bool_option("deadlock-check")))
+    return 1;
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
 int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -466,6 +565,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
       "verification strategy");
     return 1;
   }
+
+  if (options.get_bool_option("partial-order"))
+    return do_partial_order(options, goto_functions);
 
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
@@ -520,6 +622,11 @@ static bool redirect_output(const cmdlinet &cmdline)
   return true;
 }
 
+static bool rejected_flags(cmdlinet &cmdline)
+{
+  return select_loop_synthesiser(cmdline) || incompatible_flags(cmdline);
+}
+
 int esbmc_parseoptionst::doit()
 {
   if (!redirect_output(cmdline))
@@ -549,7 +656,7 @@ int esbmc_parseoptionst::doit()
   }
 
   default_kani_strategy();
-  if (incompatible_flags(cmdline))
+  if (rejected_flags(cmdline))
     return 1;
 
   // Preprocess the input program.

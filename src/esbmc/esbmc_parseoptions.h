@@ -108,6 +108,7 @@ protected:
     optionst &options,
     goto_functionst &goto_functions);
 
+  int do_partial_order(optionst &options, goto_functionst &goto_functions);
   int run_chosen_strategy(optionst &options, goto_functionst &goto_functions);
 
   int doit_k_induction_parallel();
@@ -140,6 +141,7 @@ protected:
   /// True if any --binary input is a CBMC goto-binary (magic 0x7f 'G' 'B' 'F').
   bool has_cbmc_binary_input();
   bool has_kani_binary_input();
+  bool has_loop_invariant_binary_input();
   void default_kani_strategy();
 
   /// Synthesises ESBMC's "additions" (the __ESBMC_main entry wrapper and the

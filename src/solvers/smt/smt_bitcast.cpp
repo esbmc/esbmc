@@ -250,9 +250,16 @@ smt_astt smt_solver_baset::encode_pointer_repr(
   const expr2tc &ptr,
   const type2tc &to_type)
 {
-  smt_astt address = convert_ast(typecast2tc(to_type, ptr));
   /* The pointer a byte update overwrites: once a byte changes, its bits name
-   * no pointer, and recording each partial value swamps the solver. */
+   * no pointer, and recording each partial value swamps the solver. Bits an
+   * earlier byte update stored are its representation (C17 6.2.6.1p4);
+   * rebuilding a pointer from them and taking its address again nests one
+   * address-space search per byte copied (#9227). */
+  if (ptr == step_overwritten)
+    if (
+      auto it = stored_pointer_bits.find(ptr); it != stored_pointer_bits.end())
+      return it->second.first;
+  smt_astt address = convert_ast(typecast2tc(to_type, ptr));
   if (ptr == step_overwritten)
     return address;
   smt_astt pointer = convert_ast(ptr);
@@ -338,9 +345,27 @@ void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
 void smt_solver_baset::note_assignment(const expr2tc &lhs, const expr2tc &rhs)
 {
   step_assigned = to_symbol2t(lhs).get_symbol_name();
-  step_overwritten = is_pointer_type(rhs) && is_byte_update2t(rhs)
-                       ? to_byte_update2t(rhs).source_value
-                       : expr2tc();
+  // A byte store into a pointer held in an array or struct is a WITH around
+  // the byte update.
+  expr2tc stored = rhs, at = lhs;
+  while (is_with2t(stored))
+  {
+    const with2t &with = to_with2t(stored);
+    at = is_array_or_vector_type(with.type)
+           ? expr2tc(index2tc(
+               array_or_vector_subtype(with.type), at, with.update_field))
+           : expr2tc(member2tc(
+               with.update_value->type,
+               at,
+               to_constant_string2t(with.update_field).value));
+    stored = with.update_value;
+  }
+  const bool pointer_store =
+    is_pointer_type(stored) && is_byte_update2t(stored);
+  step_overwritten =
+    pointer_store ? to_byte_update2t(stored).source_value : expr2tc();
+  step_stored = pointer_store ? stored : expr2tc();
+  step_stored_at = pointer_store ? at : expr2tc();
 }
 
 void smt_solver_baset::end_step()
@@ -353,6 +378,8 @@ void smt_solver_baset::end_step()
   step_flattens.clear();
   step_assigned.clear();
   step_overwritten = expr2tc();
+  step_stored = expr2tc();
+  step_stored_at = expr2tc();
 }
 
 /** The pointer whose flattened representation is bits [lo, lo + width) of
@@ -590,6 +617,9 @@ smt_astt smt_solver_baset::convert_pointer_bitcast(
     pointer_repr_applies(to_type, from->type))
     return decode_pointer_repr(from, to_type);
 
+  if (is_pointer_type(to_type) && (is_struct_type(from) || is_array_type(from)))
+    return convert_ast(bitcast2tc(to_type, flatten_to_bitvector(from)));
+
   return nullptr;
 }
 
@@ -658,9 +688,9 @@ smt_astt smt_solver_baset::convert_bitcast_to_struct(
   if (is_floatbv_type(new_from))
     new_from = bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
 
-  // Converting from array to struct, we convert it to bv and use the bv to
-  // struct method to do the job for us
-  if (is_array_type(new_from))
+  // Converting from an array or another struct, we convert it to bv and use
+  // the bv to struct method to do the job for us
+  if (is_array_type(new_from) || is_struct_type(new_from))
     new_from = flatten_to_bitvector(new_from);
 
   if (!is_bv_type(new_from) && !is_union_type(new_from))

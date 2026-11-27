@@ -1,0 +1,8 @@
+CORE
+main.c
+--llm-invariants --llm-command model.py
+REQUIRES posix_host
+^LLM loop invariants: 1 of 2 candidate conjunct\(s\) are inductive$
+^LLM loop invariants: round 2, asking the model$
+^Synthesised loop invariants for 1 loop$
+^VERIFICATION SUCCESSFUL$

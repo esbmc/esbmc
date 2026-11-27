@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-propagation
+^VERIFICATION FAILED$
+FAILED +\[main\.assertion\.[0-9]+\] +line +[0-9]+ +dereference failure: .*got illegal offset

@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+FAILED +\[main\.assertion\.[0-9]+\] +line +[0-9]+ +assertion v\.b\[3\] == 1
+^\*\* 1 of [0-9]+ properties failed

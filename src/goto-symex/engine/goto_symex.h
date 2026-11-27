@@ -638,6 +638,12 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Claim, assume or halt at a call to \p identifier past its recursion
+   *  bound. */
+  void recursion_bound(
+    const goto_functiont &goto_function,
+    const irep_idt &identifier);
+
   /** Convert an actual argument to its parameter's type, claiming the call
    *  undefined when the two are incompatible. */
   expr2tc argument_value(
@@ -760,6 +766,36 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Models a memset into @p item whose offset or length @p n is not a
+   *  constant, the case __memset_impl unwinds --unwind times (#10991): each
+   *  byte j of the object becomes ite(off <= j && j - off < n, value, old),
+   *  and off + n is claimed to stay within the object. Returns false, changing
+   *  nothing, when off and n are both constant, n is signed, or the object is
+   *  read-only or not an integer or integer array of at most 4 KiB (1 KiB
+   *  when off is symbolic). An object of no fixed size goes to
+   *  memset_whole_dynamic. */
+  bool memset_symbolic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** Fills a byte array of symbolic size whole, as calloc does, with one
+   *  assignment of array_of(value) plus a bounds claim. Applies only from
+   *  offset 0 when @p n is the array's size expression, or the request that
+   *  symex_mem wraps as ite(fits, n, 0). Returns false, changing nothing,
+   *  otherwise (#10991). */
+  bool memset_whole_dynamic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** The pointer checks and return-value assignment shared by both of
+   *  intrinsic_memset's paths. */
+  void memset_finish(
+    const code_function_call2t &func_call,
+    const expr2tc &ptr,
+    const expr2tc &n);
+
   /**
    * @brief Intrinsic call for C memcpy function call
    *
@@ -802,8 +838,10 @@ protected:
    *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
    *  path: bound the copy by the objects' own widths, guard each byte position
    *  with i < n, and claim n <= that bound so an over-long copy is still
-   *  reported. Returns false when the operands cannot be resolved, leaving the
-   *  caller to bump. */
+   *  reported. A source at a symbolic offset is read through the offset; a
+   *  byte-array destination at a symbolic offset gets one store per byte.
+   *  Returns false when the operands cannot be resolved, leaving the caller
+   *  to bump. */
   bool memcpy_symbolic_length(
     const expr2tc &dst_arg,
     const expr2tc &src_arg,
@@ -829,6 +867,16 @@ protected:
    *  not a code object; nothing under --no-pointer-check. */
   void claim_not_code(const expr2tc &guard);
 
+  /** Resolve @p ptr to a single fixed-size scalar or array object, giving
+   *  the renamed, simplified byte @p offset into it (constant or not) and the
+   *  object's byte @p size. Returns false on any miss. */
+  bool resolve_byte_object(
+    const expr2tc &ptr,
+    expr2tc &object,
+    expr2tc &offset,
+    uint64_t &size,
+    bool rename_object = true);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
@@ -838,8 +886,7 @@ protected:
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
-    uint64_t &avail_bytes,
-    bool rename_object = true);
+    uint64_t &avail_bytes);
 
   /** Claims @p ptr is not NULL unless @p n is zero. */
   void claim_nonnull_operand(
@@ -1317,6 +1364,13 @@ protected:
     expr2tc &rhs,
     guard2tc &guard,
     const bool hidden);
+
+  /** The scalar field symbols of the split struct @p lhs, each with the
+   *  member of @p rhs it takes. */
+  static void split_leaves(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    std::vector<std::pair<expr2tc, expr2tc>> &leaves);
 
   /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
    *  holds, as one field step per member. Every step but the last is hidden;
@@ -1810,6 +1864,15 @@ protected:
    *  guarded this way constrains the claims of all of them (#10296). */
   virtual void guard_by_interleaving(expr2tc &) const
   {
+  }
+
+  /** Stop only the current thread where \p cond holds: a loop or recursion
+   *  needs one more iteration or call past its bound, or an assumption fails.
+   *  Returns false when this must be an assumption on the whole equation
+   *  instead. */
+  virtual bool halt_thread_at_bound(const expr2tc &)
+  {
+    return false;
   }
 
   // Members

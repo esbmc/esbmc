@@ -225,9 +225,9 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
     unsigned int dom_width = array_domain_width_or_word_size(arrtype);
-    return new smt_sort(
-      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
+    return own_sort(new smt_sort(
+      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype)));
   }
 
-  return new smt_sort(SMT_SORT_STRUCT, type);
+  return own_sort(new smt_sort(SMT_SORT_STRUCT, type));
 }

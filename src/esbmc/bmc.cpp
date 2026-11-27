@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <chrono>
 
 #ifndef _WIN32
+#  include <pthread.h>
 #  include <unistd.h>
 #  include <sched.h>
 #else
@@ -34,6 +36,7 @@
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/features.h>
+#include <goto-symex/equation/memory_model_sc.h>
 #include <goto-symex/trace/sarif.h>
 #include <goto-symex/equation/symex_symmetry.h>
 #include <goto-symex/trace/xml_goto_trace.h>
@@ -241,18 +244,34 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
+    const bool partial_order = opts.get_bool_option("partial-order");
+    if (partial_order)
+      algorithms.emplace_back(
+        std::make_unique<memory_model_sct>(
+          opts.get_bool_option("data-races-check"),
+          opts.get_bool_option("deadlock-check")));
+
     // Run cache if user has specified the option
     if (
       !options.get_bool_option("no-cache-asserts") &&
       !options.get_bool_option("forward-condition") &&
       !options.get_bool_option("k-induction") &&
       !options.get_bool_option("ltl"))
-      // Store the set between runs
+      // Store the set between runs. --multi-property and --check-vacuity
+      // decide each claim alone, and an implied claim can differ from the
+      // one implying it there.
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(get_ssa_caching_db()));
+        std::make_unique<assertion_cache>(
+          get_ssa_caching_db(),
+          !options.get_bool_option("multi-property") &&
+            !options.get_bool_option("check-vacuity")));
 
+    // A shared read may observe a write after the last assertion.
     if (opts.get_bool_option("no-slice"))
-      algorithms.emplace_back(std::make_unique<simple_slice>());
+    {
+      if (!partial_order)
+        algorithms.emplace_back(std::make_unique<simple_slice>());
+    }
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
 
@@ -356,14 +375,21 @@ static bool model_runs_invariant_havoc(
   const symex_target_equationt &eq,
   smt_convt &smt_conv)
 {
-  for (const auto &step : eq.SSA_steps)
-  {
-    if (step.is_assert() && !step.ignore)
-      return false;
-    if (runs_invariant_havoc(step, smt_conv))
-      return true;
-  }
-  return false;
+  bool decided = false, runs = false;
+  auto visit = [&](const symex_target_equationt::SSA_stept &step, bool kept) {
+    if (decided)
+      return;
+    if (step.is_assert() && kept)
+      decided = true;
+    else if (runs_invariant_havoc(step, smt_conv))
+      decided = runs = true;
+  };
+  eq.for_each_step(
+    [&](const symex_target_equationt::SSA_stept &step) {
+      visit(step, !step.ignore);
+    },
+    [&](const symex_target_equationt::SSA_stept &step) { visit(step, false); });
+  return runs;
 }
 
 // Attached to a claim downgraded from Failed to Unknown because the only trace
@@ -372,12 +398,13 @@ static const char *const weak_invariant_note =
   "loop invariant too weak to prove this claim: the counterexample is against "
   "the havoc abstraction, not a reachable state of the program";
 
-void bmct::record_satisfiable_claim(
+smt_convt &bmct::record_satisfiable_claim(
   const claim_slicer &claim,
   const property_locationt &loc,
   bool inductive_step,
   symex_target_equationt &local_eq,
-  smt_convt &smt_conv)
+  smt_convt &smt_conv,
+  std::unique_ptr<smt_convt> &entry_solver)
 {
   // Neither answer refutes the program. An inductive-step run starts from an
   // arbitrary state, and a claim downstream of a loop-invariant havoc is
@@ -397,30 +424,38 @@ void bmct::record_satisfiable_claim(
         property_verdictt::Unknown,
         loc,
         "inductive step could not prove this claim");
-    return;
+    return smt_conv;
   }
 
   // A claim downstream of the havoc is unknowable only while the abstraction
-  // admits an execution that avoids it (issues #7585, #10642).
+  // admits an execution that avoids it (issues #7585, #10642), and no run from
+  // the loop's entry state violates it (#11027).
+  std::unique_ptr<smt_convt> entry_model;
   if (
     claim.claim_after_invariant_havoc &&
     !is_loop_invariant_obligation(claim.claim_location) &&
     model_runs_invariant_havoc(local_eq, smt_conv) &&
-    check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE)
+    check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE &&
+    !(entry_model = solve_from_loop_entry(local_eq)))
   {
     weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
       claim.claim_key, property_verdictt::Unknown, loc, weak_invariant_note);
-    return;
+    return smt_conv;
   }
 
   goto_functionst::property_verdicts.record(
     claim.claim_key, property_verdictt::Failed, loc);
+  if (!entry_model)
+    return smt_conv;
+  entry_solver = std::move(entry_model);
+  return *entry_solver;
 }
 
 void bmct::record_violated_properties(
   smt_convt &smt_conv,
-  const symex_target_equationt &eq)
+  const symex_target_equationt &eq,
+  bool from_loop_entry)
 {
   // A subprocess SMT-LIB backend answers sat/unsat without necessarily being
   // able to produce a model (that is what --result-only buys there). Which
@@ -452,8 +487,8 @@ void bmct::record_violated_properties(
 
     const locationt &location = step.source.pc->location;
     const std::string description = id2string(step.comment);
-    const bool abstraction_derived =
-      seen_invariant_havoc && !is_loop_invariant_obligation(location);
+    const bool abstraction_derived = !from_loop_entry && seen_invariant_havoc &&
+                                     !is_loop_invariant_obligation(location);
     const bool weak_invariant =
       abstraction_derived && !invariant_refutes(eq, claim_index);
     if (weak_invariant)
@@ -475,16 +510,28 @@ void bmct::solve_past_the_abstraction(
   if (
     result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
     options.get_bool_option("forward-condition") ||
-    options.get_bool_option("smt-during-symex"))
+    options.get_bool_option("smt-during-symex") || !runtime_solver->has_model())
     return;
 
-  std::vector<symex_target_equationt::SSA_stept *> set_aside;
-  while (runtime_solver->has_model())
-  {
-    record_violated_properties(*runtime_solver, eq);
-    if (!violates_only_the_abstraction())
-      break;
+  record_violated_properties(*runtime_solver, eq);
+  if (!violates_only_the_abstraction())
+    return;
 
+  if (auto entry_model = solve_from_loop_entry(eq))
+  {
+    runtime_solver = std::move(entry_model);
+    record_violated_properties(*runtime_solver, eq, true);
+    return;
+  }
+  set_aside_abstraction_violations(eq);
+}
+
+void bmct::set_aside_abstraction_violations(symex_target_equationt &eq)
+{
+  std::vector<std::pair<symex_target_equationt::SSA_stept *, expr2tc>>
+    set_aside;
+  for (;;)
+  {
     const size_t before = set_aside.size();
     for (auto &step : eq.SSA_steps)
       if (
@@ -492,19 +539,30 @@ void bmct::solve_past_the_abstraction(
         !runtime_solver->l_get(step.cond_expr).is_true())
       {
         step.ignore = true;
-        set_aside.push_back(&step);
+        set_aside.emplace_back(&step, step.cond_expr);
       }
     if (set_aside.size() == before)
       break;
 
     std::unique_ptr<smt_convt> next(create_solver("", ns, options));
     if (run_decision_procedure(*next, eq) != P_SATISFIABLE)
+    {
+      // The model kept violates this batch, and its trace reads their
+      // cond_expr, which encoding them as set aside replaced with true.
+      for (size_t i = before; i < set_aside.size(); ++i)
+        set_aside[i].first->cond_expr = set_aside[i].second;
       break;
+    }
     runtime_solver = std::move(next);
+    if (!runtime_solver->has_model())
+      break;
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
   }
 
-  for (auto *step : set_aside)
-    step->ignore = false;
+  for (auto &entry : set_aside)
+    entry.first->ignore = false;
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -749,12 +807,46 @@ void bmct::report_violation()
 /// found downstream of a loop-invariant havoc is then one the invariant itself
 /// forces, not an artefact of the abstraction (issues #7585, #10642).
 smt_resultt
-bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
+bmct::check_claim_unsatisfiable(const symex_target_equationt &eq) const
 {
+  // A copy: the encoding rewrites each claim's cond_expr, which the trace of
+  // the violating model reads back.
+  symex_target_equationt probe = eq;
   std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
-  local_eq.convert(
-    *solver, symex_target_equationt::assertion_modet::Satisfiable);
+  probe.convert(*solver, symex_target_equationt::assertion_modet::Satisfiable);
   return solver->dec_solve();
+}
+
+/// A model violating a claim of \p eq with every loop-invariant havoc keeping
+/// the value the loop is entered with, or null when there is none. That run is
+/// the loop's first iteration, so such a model is a counterexample against the
+/// program rather than against the abstraction (#11027).
+std::unique_ptr<smt_convt>
+bmct::solve_from_loop_entry(symex_target_equationt &eq) const
+{
+  // Pinning the havoc'd value rather than replacing the step keeps its nondet
+  // symbol, which the trace and witnesses read, equal to the entry value.
+  symex_target_equationt probe = eq;
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  probe.convert(*solver);
+  for (const auto &step : probe.SSA_steps)
+    if (!step.ignore && !is_nil_expr(step.havoc_entry))
+      solver->assert_expr(equality2tc(step.lhs, step.havoc_entry));
+  if (solver->dec_solve() != P_SATISFIABLE)
+    return nullptr;
+
+  // The caller reads eq back against this model, so hand it what encoding the
+  // copy wrote into each step.
+  auto it = eq.SSA_steps.begin();
+  for (auto &step : probe.SSA_steps)
+  {
+    it->cond_expr = std::move(step.cond_expr);
+    if (step.output_data)
+      it->output_data->converted_output_args =
+        std::move(step.output_data->converted_output_args);
+    ++it;
+  }
+  return solver;
 }
 
 /// Whether the invariant leaves the claim at \p claim_index no way to be
@@ -800,6 +892,12 @@ static bool is_vacuity_probe_candidate(const std::string &claim_property)
          claim_property == "assigns compliance";
 }
 
+static bool is_shown_in_program(const symex_target_equationt::SSA_stept &step)
+{
+  return step.is_assert() || step.is_assignment() || step.is_assume() ||
+         step.is_event();
+}
+
 void bmct::show_program(const symex_target_equationt &eq)
 {
   unsigned int count = 1;
@@ -815,7 +913,7 @@ void bmct::show_program(const symex_target_equationt &eq)
 
   for (auto const &it : eq.SSA_steps)
   {
-    if (!(it.is_assert() || it.is_assignment() || it.is_assume()))
+    if (!is_shown_in_program(it))
       continue;
 
     if (it.ignore && !sliced)
@@ -826,6 +924,14 @@ void bmct::show_program(const symex_target_equationt &eq)
     if (!it.comment.empty())
       oss << " (" << it.comment << ")";
     oss << "\n/* " << count << " */ ";
+
+    if (it.is_event())
+    {
+      it.output(ns, oss);
+      oss << '\n';
+      count++;
+      continue;
+    }
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
@@ -991,6 +1097,110 @@ void run_job_guarded(
     if (final_result != P_SATISFIABLE)
       final_result = P_ERROR;
   }
+}
+
+/// The CPUs this process may run on. hardware_concurrency() counts every
+/// online CPU on Linux, ignoring a taskset or BenchExec affinity mask.
+static size_t available_cpus()
+{
+#ifdef __linux__
+  cpu_set_t set;
+  if (sched_getaffinity(0, sizeof(set), &set) == 0)
+    return CPU_COUNT(&set);
+#endif
+  // hardware_concurrency() returns 0 when the count is unknown.
+  return std::max(1u, std::thread::hardware_concurrency());
+}
+
+/// --parallel-solving-threads, or one thread per available CPU.
+static size_t parallel_solving_threads(const optionst &options)
+{
+  const std::string n = options.get_option("parallel-solving-threads");
+  return n.empty() ? available_cpus() : std::max(1, std::stoi(n));
+}
+
+/// One claim's view of a shared equation, for the slicers to write. It lives
+/// in its worker's buffer, whose capacity outlasts the job, so a job neither
+/// copies the equation nor allocates a step list. Emptied when the job ends,
+/// as it holds the equation's expressions.
+class claim_slice_buffert
+{
+public:
+  explicit claim_slice_buffert(const symex_target_equationt &eq)
+    : steps(buffer())
+  {
+    // Not left empty when an earlier fill threw.
+    steps.clear();
+    steps.reserve(eq.SSA_steps.size());
+    for (const auto &step : eq.SSA_steps)
+      steps.emplace_back(step);
+  }
+  ~claim_slice_buffert()
+  {
+    steps.clear();
+  }
+
+  std::vector<symex_target_equationt::sliced_stept> &steps;
+
+private:
+  static std::vector<symex_target_equationt::sliced_stept> &buffer()
+  {
+    thread_local std::vector<symex_target_equationt::sliced_stept> steps;
+    return steps;
+  }
+};
+
+/// Runs @p job on each element of @p jobs, in order, on the calling thread and
+/// up to @p max_threads - 1 helpers. A thread per job exhausted the
+/// per-process thread limit once loop unrolling multiplied the claims (6144
+/// threads on macOS).
+template <typename jobt>
+void run_on_worker_pool(
+  const std::vector<size_t> &jobs,
+  size_t max_threads,
+  const jobt &job)
+{
+  std::atomic<size_t> next{0};
+  std::function<void()> worker = [&] {
+    for (size_t k = next++; k < jobs.size(); k = next++)
+      job(jobs[k]);
+  };
+  const size_t threads = std::min(jobs.size(), max_threads);
+  log_debug(
+    "parallel-solving",
+    "Solving {} VCCs in parallel, worker threads: {}",
+    jobs.size(),
+    threads);
+#ifdef _WIN32
+  std::vector<std::thread> pool;
+  for (size_t h = 1; h < threads; ++h)
+    pool.emplace_back(worker);
+  worker();
+  for (auto &t : pool)
+    t.join();
+#else
+  // Solving recurses over expressions as symex does, so a helper needs the
+  // calling thread's large stack, not the default 512 KiB on macOS (#6617).
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 512UL * 1024 * 1024);
+  auto trampoline = [](void *w) -> void * {
+    (*static_cast<std::function<void()> *>(w))();
+    return nullptr;
+  };
+  std::vector<pthread_t> pool;
+  for (size_t h = 1; h < threads; ++h)
+  {
+    pthread_t t;
+    // A helper the system refuses only leaves its jobs to the others.
+    if (pthread_create(&t, &attr, trampoline, &worker) == 0)
+      pool.push_back(t);
+  }
+  pthread_attr_destroy(&attr);
+  worker();
+  for (pthread_t t : pool)
+    pthread_join(t, nullptr);
+#endif
 }
 
 /// True when the multi-witness report must avoid box-drawing glyphs. A console
@@ -2712,6 +2922,16 @@ static void report_empty_coverage(const optionst &options)
   }
 }
 
+static goto_symext::symex_resultt
+next_formula(reachability_treet &symex, const optionst &options)
+{
+  if (options.get_bool_option("partial-order"))
+    return symex.generate_partial_order_formula();
+  if (options.get_bool_option("schedule"))
+    return symex.generate_schedule_formula();
+  return symex.get_next_formula();
+}
+
 smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
   // Clear collected pytest test data at the start of coverage run
@@ -2725,9 +2945,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   fine_timet symex_start = current_time();
   try
   {
-    goto_symext::symex_resultt solver_result =
-      options.get_bool_option("schedule") ? symex->generate_schedule_formula()
-                                          : symex->get_next_formula();
+    goto_symext::symex_resultt solver_result = next_formula(*symex, options);
 
     fine_timet symex_stop = current_time();
 
@@ -2753,6 +2971,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       a->run(eq->SSA_steps);
       ignored += a->ignored();
+      solver_result.total_claims += a->claims_added();
+      solver_result.remaining_claims += a->claims_added();
     }
 
     // Count remaining assertions after all algorithms have run
@@ -3511,8 +3731,7 @@ smt_resultt bmct::multi_property_check(
         return;
     }
 
-    // Since this is just a copy, we probably don't need a lock
-    symex_target_equationt local_eq = eq;
+    claim_slice_buffert slice(eq);
 
     // Set up the current claim and disable slice info output.
     // `is_goto_cov` flips claim_slicer's `claim_msg` source: in goto-cov
@@ -3526,7 +3745,7 @@ smt_resultt bmct::multi_property_check(
     // signature (PR #4330 review).
     const bool is_goto_cov = is_cov_run || is_dead_code;
     claim_slicer claim(i, false, is_goto_cov, ns);
-    claim.run(local_eq.SSA_steps);
+    claim.run(slice.steps);
 
     const property_locationt &claim_ploc = claim.claim_ploc;
     const std::string claim_class =
@@ -3576,14 +3795,16 @@ smt_resultt bmct::multi_property_check(
     if (!options.get_bool_option("no-slice"))
     {
       symex_slicet slicer(options);
-      slicer.run(local_eq.SSA_steps);
+      slicer.run(slice.steps);
     }
 
     if (options.get_bool_option("ssa-features-dump"))
     {
       ssa_features features;
-      features.run(local_eq.SSA_steps);
+      features.run_on(slice.steps);
     }
+
+    symex_target_equationt local_eq(eq, slice.steps);
 
     std::string cone_key;
     bool cached_proof = false;
@@ -3730,7 +3951,10 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        record_satisfiable_claim(claim, claim_ploc, is, local_eq, *solver_ptr);
+      {
+        solver_ptr = &record_satisfiable_claim(
+          claim, claim_ploc, is, local_eq, *solver_ptr, new_solver);
+      }
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would
@@ -4067,38 +4291,12 @@ smt_resultt bmct::multi_property_check(
       // PARALLEL
       if (options.get_bool_option("parallel-solving"))
       {
-        /* NOTE: I would love to use std::for_each here, but it is not giving
-         * the result I would expect. My guess is either compiler version
-         * or some magic flag that we are not using.
-         *
-         * Nevertheless, we can achieve the same results by just creating
-         * threads.
-         */
-
-        // TODO: Running everything in parallel might be a bad idea.
-        //       Should we also add a thread pool?
         threads_scope scope;
-        std::vector<std::thread> parallel_jobs;
-        for (const auto &i : jobs)
-          parallel_jobs.push_back(
-            std::thread(
-              [&](const size_t &n) {
-                run_job_guarded(
-                  job_function,
-                  n,
-                  result_mutex,
-                  final_result,
-                  report_incomplete);
-              },
-              i));
-
-        // Main driver
-        for (auto &t : parallel_jobs)
-        {
-          t.join();
-        }
-        // We could remove joined jobs from the parallel_jobs vector.
-        // However, its probably not worth for small vectors.
+        run_on_worker_pool(
+          jobs, parallel_solving_threads(options), [&](size_t n) {
+            run_job_guarded(
+              job_function, n, result_mutex, final_result, report_incomplete);
+          });
       }
       // SEQUENTIAL
       else

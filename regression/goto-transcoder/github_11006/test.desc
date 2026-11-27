@@ -1,0 +1,4 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 8
+^VERIFICATION SUCCESSFUL$

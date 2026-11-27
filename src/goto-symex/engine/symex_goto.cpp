@@ -509,7 +509,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         cur_state->source,
         cur_state->gen_stack_trace(),
         true,
-        first_loop);
+        first_loop,
+        expr2tc());
 
       if (is_constant_expr(new_rhs))
         guard_expr = new_rhs;
@@ -850,7 +851,8 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       cur_state->source,
       cur_state->gen_stack_trace(),
       true,
-      first_loop);
+      first_loop,
+      expr2tc());
   }
 }
 
@@ -879,11 +881,17 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     note_bounded_loop_truncation();
 
     // generate unwinding assumption, unless we permit partial loops
-    expr2tc guarded_expr = negated_cond;
-    cur_state->guard.guard_expr(guarded_expr);
-    guard_by_interleaving(guarded_expr);
-    target->assumption(
-      cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
+    if (!halt_thread_at_bound(guard))
+    {
+      expr2tc guarded_expr = negated_cond;
+      cur_state->guard.guard_expr(guarded_expr);
+      guard_by_interleaving(guarded_expr);
+      target->assumption(
+        cur_state->guard.as_expr(),
+        guarded_expr,
+        cur_state->source,
+        first_loop);
+    }
 
     // This assumption SILENTLY discards every path that needed one more
     // iteration -- there is no unwinding assertion to flag it, so a run

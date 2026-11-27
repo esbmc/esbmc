@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --multi-property --cex-output trace.cex
+^\s+FAILED\s+\[main\.assertion\.3\]\s+line\s+11\s+top: x==1$
+^VERIFICATION FAILED$
+CHECK_FILE base-k0-0-trace.cex contains ^Violated property:\n.*\n  top: x==1$

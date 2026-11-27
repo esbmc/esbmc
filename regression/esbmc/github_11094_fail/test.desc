@@ -1,0 +1,5 @@
+CORE
+main.c
+--std c11
+^VERIFICATION FAILED$
+VLA array dimension must be greater than zero

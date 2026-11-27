@@ -1,0 +1,4 @@
+CORE
+main.c
+--llm-invariants --llm-command model.py --llm-max-rounds 0
+^ERROR: --llm-max-rounds must be at least 1$

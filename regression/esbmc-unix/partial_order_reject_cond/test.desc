@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a call to pthread_cond_timedwait yet, at file .*main\.c line 11 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

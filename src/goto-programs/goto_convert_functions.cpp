@@ -100,6 +100,16 @@ void goto_convert_functionst::add_return(
 
 // Stamp `loc` onto every value-level sub-expression of `expr` that lacks a
 // source location (used by restore_value_locations below).
+/// Whether convert_decl must handle a declaration of type \p t: code, an
+/// array, or a pointer to an array (#11094).
+static bool decl_needs_legacy_type(const typet &t)
+{
+  const typet *pointee = &t;
+  while (pointee->is_pointer())
+    pointee = &pointee->subtype();
+  return t.is_code() || pointee->is_array();
+}
+
 static void stamp_value_locations(exprt &expr, const locationt &loc)
 {
   // Read this node's OWN location (const overload, non-recursive); the mutable
@@ -793,7 +803,10 @@ bool goto_convert_functionst::convert_native_rec(
 
     symbolt *s = context.find_symbol(decl.value);
     if (s == nullptr)
-      return false;
+    {
+      log_error("decl of `{}' has no symbol", id2string(decl.value));
+      abort();
+    }
 
     auto delegate_to_legacy = [&]() {
       exprt op = migrate_expr_back(code2);
@@ -802,17 +815,18 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     };
 
-    // Delegate the two convert_decl shapes this handler does not reproduce
+    // Delegate the convert_decl shapes this handler does not reproduce
     // natively:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator — exclude all arrays conservatively.
+    //    generator — exclude all arrays conservatively,
+    //  - a pointer to an array may point to a VLA, whose bounds convert_decl
+    //    checks.
     // A destructible type or an initializer needing lowering is delegated the
     // same way just below; everything else is convert_decl's plain path
     // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit
     // code_dead) reproduced natively after that.
-    if (
-      s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
+    if (s->static_lifetime || decl_needs_legacy_type(s->get_type()))
       return delegate_to_legacy();
 
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
@@ -1577,10 +1591,11 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_break2t &b = to_code_break2t(code2);
 
-    // A break outside a loop or switch shouldn't reach here, but stay defensive
-    // rather than trust the invariant.
     if (!targets.break_set)
-      return false;
+    {
+      log_error("break without target");
+      abort();
+    }
 
     // unwind_destructor_stack emits the exit DEADs into `dest` then restores
     // targets.destructor_stack to its pre-call state — a break is one exit
@@ -1600,7 +1615,10 @@ bool goto_convert_functionst::convert_native_rec(
     const code_continue2t &c = to_code_continue2t(code2);
 
     if (!targets.continue_set)
-      return false;
+    {
+      log_error("continue without target");
+      abort();
+    }
 
     unwind_destructor_stack(c.location, targets.continue_stack_size, dest);
 

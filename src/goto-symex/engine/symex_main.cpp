@@ -316,6 +316,17 @@ void goto_symext::assume(const expr2tc &the_assumption)
   if (is_true(assumption))
     return;
 
+  expr2tc fails = assumption;
+  make_not(fails);
+  if (halt_thread_at_bound(fails))
+  {
+    if (assume_is_false)
+      cur_state->guard.make_false();
+    else
+      cur_state->guard.add(assumption);
+    return;
+  }
+
   cur_state->guard.guard_expr(assumption);
   guard_by_interleaving(assumption);
 

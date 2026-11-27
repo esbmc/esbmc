@@ -147,6 +147,11 @@ if(NOT WIN32)
     endif()
 endif()
 
+# A test can name a script with a shebang line as a program to run.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES posix_host)
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as
@@ -292,6 +297,9 @@ endif()
 if(ENABLE_LD_FRONTEND)
     set(REGRESSIONS_LD ld)
 endif()
+if(ENABLE_LLM)
+    set(REGRESSIONS_LLM llm)
+endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
     set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
@@ -422,6 +430,7 @@ if(APPLE)
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
+                    ${REGRESSIONS_LLM}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -503,6 +512,7 @@ else()
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
+                    ${REGRESSIONS_LLM}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage
@@ -687,6 +697,10 @@ set(_slow_regression_tests
     # 9-33s to 44-68s on the DebugOpt Linux runner, and runner noise pushed it
     # past the 120s cap on unrelated PRs.
     "regression/esbmc-cpp/cpp/vector_reserve_realloc_nested"
+    # #10965 stops carrying a struct that holds a pointer, so flat_map's vector
+    # copies are no longer folded (#10982): ~20s locally, ~4.5x that on the
+    # DebugOpt Linux runner.
+    "regression/esbmc-cpp/cpp/github_7797_flat_map_update"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive
