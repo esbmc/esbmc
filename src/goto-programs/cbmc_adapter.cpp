@@ -266,6 +266,34 @@ irept mk_binary(
   return e;
 }
 
+// Rewrites `is_dynamic_object(p)` (__CPROVER_DYNAMIC_OBJECT) in place. A bare
+// id irep can be a name: CBMC's contracts library has a local variable called
+// is_dynamic_object.
+static void rewrite_is_dynamic_object(irept &irep)
+{
+  if (irep.id() != "is_dynamic_object" || irep.get_sub().size() != 1)
+    return;
+
+  // The body of __CPROVER_DYNAMIC_OBJECT in builtin_libs.c. The p != NULL
+  // test is needed: a malloc that returns NULL marks object 0 dynamic.
+  const irept ptr = irep.get_sub()[0];
+  const typet bool_ty = bool_type();
+
+  irept is_dynamic("symbol");
+  is_dynamic.add("type") = array_typet(bool_ty, exprt("infinity", size_type()));
+  is_dynamic.set("identifier", "c:@__ESBMC_is_dynamic");
+
+  irep = mk_binary(
+    "and",
+    bool_ty,
+    mk_binary("notequal", bool_ty, ptr, mk_null_ptr(ptr.find("type"))),
+    mk_binary(
+      "index",
+      bool_ty,
+      is_dynamic,
+      mk_unary("pointer_object", pointer_type(), ptr)));
+}
+
 // Element type of a complex type irep, tolerant of both shapes: CBMC's raw
 // form keeps it as the sole positional sub; the normalised form (fix_type /
 // fix_expression's own type case) as the "subtype" named-sub.
@@ -368,30 +396,7 @@ void fix_expression(irept &irep)
     // Fall through: the operand-wrap step normalises the new typecast/constant.
   }
 
-  // A bare id irep can be a name: CBMC's contracts library has a local
-  // variable called is_dynamic_object.
-  if (irep.id() == "is_dynamic_object" && irep.get_sub().size() == 1)
-  {
-    // The body of __CPROVER_DYNAMIC_OBJECT in builtin_libs.c. The p != NULL
-    // test is needed: a malloc that returns NULL marks object 0 dynamic.
-    const irept ptr = irep.get_sub()[0];
-    const typet bool_ty = bool_type();
-
-    irept is_dynamic("symbol");
-    is_dynamic.add("type") =
-      array_typet(bool_ty, exprt("infinity", size_type()));
-    is_dynamic.set("identifier", "c:@__ESBMC_is_dynamic");
-
-    irep = mk_binary(
-      "and",
-      bool_ty,
-      mk_binary("notequal", bool_ty, ptr, mk_null_ptr(ptr.find("type"))),
-      mk_binary(
-        "index",
-        bool_ty,
-        is_dynamic,
-        mk_unary("pointer_object", pointer_type(), ptr)));
-  }
+  rewrite_is_dynamic_object(irep);
 
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
@@ -819,9 +824,9 @@ void fix_expression(irept &irep)
   {
     // CBMC's generic object allocation (remove_java_new.cpp:99-103): operands
     // are the byte size and a zero-initialise flag, and the type is already the
-    // result pointer. With the flag false that is a malloc in all but name. A
-    // true flag (CBMC's calloc, DFCC's write and object sets) becomes a call to
-    // ESBMC's calloc model, which lift_call_expressions hoists to a statement.
+    // result pointer. Unlike malloc it never returns NULL, which CBMC's DFCC
+    // contracts library relies on, so it calls the additions' helper that
+    // assumes the allocation succeeds; lift_call_expressions hoists the call.
     const irept::subt ops = irep.get_sub();
     if (ops.size() != 2)
       throw std::string(
@@ -836,28 +841,21 @@ void fix_expression(irept &irep)
     size_arg.add("type") = static_cast<const irept &>(size_type());
     size_arg.get_sub().push_back(ops[0]);
 
+    irept flag_arg(irep_idt("constant"));
+    flag_arg.add("type") = mk("bool");
+    flag_arg.set("value", zero ? "true" : "false");
+
+    irept helper(irep_idt("symbol"));
+    helper.set("identifier", "c:@F@__cbmc_allocate_impl");
+    irept args(irep_idt("arguments"));
+    args.get_sub().push_back(size_arg);
+    args.get_sub().push_back(flag_arg);
+
     irep.id("sideeffect");
     irep.get_sub().clear();
-    if (zero)
-    {
-      irept calloc(irep_idt("symbol"));
-      calloc.set("identifier", "c:@F@calloc");
-      irept args(irep_idt("arguments"));
-      args.get_sub().push_back(mk_bv_const(size_arg.find("type"), 1));
-      args.get_sub().push_back(size_arg);
-
-      irep.add("statement") = mk("function_call");
-      irep.get_sub().push_back(calloc);
-      irep.get_sub().push_back(args);
-    }
-    else
-    {
-      fix_expression(size_arg);
-      irep.add("statement") = mk("malloc");
-      irep.get_sub().push_back(ops[0]);
-      irep.add("#size") = size_arg;
-      irep.add("#type") = static_cast<const irept &>(char_type());
-    }
+    irep.add("statement") = mk("function_call");
+    irep.get_sub().push_back(helper);
+    irep.get_sub().push_back(args);
   }
 
   if (
