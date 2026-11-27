@@ -1063,7 +1063,10 @@ void fix_expression(irept &irep)
     // op0() reads an empty operand list and segfaults (same failure shape as
     // isnan/popcount).
     "forall",
-    "exists"};
+    "exists",
+    // goto-cc removes the comma operator from code but keeps it in a loop
+    // invariant.
+    "comma"};
 
   const std::string cur = irep.id_string();
 
