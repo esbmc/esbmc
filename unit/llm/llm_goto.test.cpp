@@ -6,6 +6,7 @@ Module: Unit tests for src/llm/goto: GOTO renderer and expression parser
 #include <catch2/catch.hpp>
 
 #include <irep2/irep2_utils.h>
+#include <llm/goto/invariants.h>
 #include <llm/goto/parse_expr.h>
 #include <llm/goto/render.h>
 #include <llm/llm_client.h>
@@ -707,4 +708,25 @@ TEST_CASE(
   answer.erase(std::remove(answer.begin(), answer.end(), '`'), answer.end());
   INFO(answer);
   CHECK(llm::parse_expr(answer, r.scope, f.ns).has_value());
+}
+
+TEST_CASE("invariant answers are read from the last block only", "[llm]")
+{
+  const std::vector<llm::invariant_linet> lines = llm::parse_invariant_answer(
+    "Step 1: the block looks like <invariants>main L9: no</invariants>.\n"
+    "<invariants>\n"
+    "main L1: x + y == i\n"
+    "  `sum L2: s <= n;`  \n"
+    "not a line\n"
+    "main L3:\n"
+    "</invariants>\n"
+    "main L4: after the block\n");
+  REQUIRE(lines.size() == 2);
+  CHECK(lines[0].function == "main");
+  CHECK(lines[0].loop == "L1");
+  CHECK(lines[0].expression == "x + y == i");
+  CHECK(lines[1].function == "sum");
+  CHECK(lines[1].loop == "L2");
+  CHECK(lines[1].expression == "s <= n");
+  CHECK(llm::parse_invariant_answer("main L1: i <= n").empty());
 }

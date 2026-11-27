@@ -95,9 +95,10 @@ std::string l1_name(const expr2tc &e)
          std::to_string(s.thread_num);
 }
 
-/** No recursion, and no function pointers outside the library models. Loops in
- * callees are checked during capture: one that would run more than once
- * leaves an unwinding assertion in the step.
+/** No recursion, no function pointers outside the library models, and no
+ * callee that k-induction transformed. A callee loop it left alone is checked
+ * during capture: one that would run more than once leaves an unwinding
+ * assertion in the step.
  */
 bool calls_are_supported(
   const goto_functionst &fns,
@@ -135,8 +136,20 @@ bool calls_are_supported(
     auto f = fns.function_map.find(name);
     if (f == fns.function_map.end() || !f->second.body_available)
       continue;
-    stack.push_back(name);
     const auto &body = f->second.body;
+    // Without entry flags (loop_entry_flags), a callee loop's havoc is
+    // followed by an unconditional assume of its condition, which is false
+    // whenever the loop is not entered and would cut off the rest of the path.
+    if (
+      std::any_of(
+        body.instructions.begin(), body.instructions.end(), [](const auto &i) {
+          return i.inductive_step_instruction;
+        }))
+    {
+      log_warning("{} has a loop that k-induction havocs", name.as_string());
+      return false;
+    }
+    stack.push_back(name);
     if (!calls_are_supported(
           fns,
           body.instructions.begin(),
@@ -177,14 +190,15 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
       }
       back = it;
     }
+  std::vector<irep_idt> stack{main_id};
+  if (!calls_are_supported(
+        fns, body.instructions.begin(), body.instructions.end(), false, stack))
+    return false;
   if (back == body.instructions.end())
   {
-    // No loop: every step is prefix. Calls still have to be supported, and an
-    // unwinding assertion from a callee loop still rejects the program later.
+    // No loop: every step is prefix.
     shape.loop_free = true;
-    std::vector<irep_idt> stack{main_id};
-    return calls_are_supported(
-      fns, body.instructions.begin(), body.instructions.end(), false, stack);
+    return true;
   }
   if (!is_true(back->guard))
   {
@@ -192,8 +206,8 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
     return false;
   }
 
-  // Leaving the loop (a return, a goto past it, exit or assume(0)) ends the
-  // path; capture rejects the program if an assertion can follow.
+  // Leaving the loop through its condition, a break or a goto past it runs the
+  // suffix; a return, exit or assume(0) ends the path.
   goto_programt::const_targett head = back->targets.front();
   for (auto it = head; it != back; ++it)
     if (it->is_throw())
@@ -232,10 +246,6 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
     return false;
   }
 
-  std::vector<irep_idt> stack{main_id};
-  if (!calls_are_supported(fns, body.instructions.begin(), back, false, stack))
-    return false;
-
   // The entry function runs its own set-up before calling main.
   auto entry_fn = fns.function_map.find(fns.main_id());
   if (entry_fn != fns.function_map.end())
@@ -256,6 +266,21 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
   shape.head = head->location_number;
   shape.back = back->location_number;
   return true;
+}
+
+/** A loop or recursion that runs more than once leaves an unwinding claim;
+ * only the main loop's own, at `main_back`, is expected.
+ */
+bool unwinds_inside_step(
+  const symex_target_equationt &eq,
+  const goto_programt::instructiont *main_back)
+{
+  return std::any_of(
+    eq.SSA_steps.begin(), eq.SSA_steps.end(), [main_back](const auto &s) {
+      return s.is_assert() && &*s.source.pc != main_back &&
+             s.comment.as_string().find("unwinding assertion") !=
+               std::string::npos;
+    });
 }
 
 goto_programt::targett find_location(goto_programt &body, unsigned number)
@@ -342,8 +367,10 @@ int marker_index(const expr2tc &lhs, const std::string &kind)
  *
  * So each marker's rhs is the value wanted, and the steps between markers are
  * the prefix and the body: assignments become *_defs, assumes become
- * *_assumes (or invariants when inductive-step-only), asserts become *_bad.
- * back_guard is the guard the first ts$post$ step carries.
+ * *_assumes (or invariants when inductive-step-only in the body), asserts
+ * become *_bad.
+ * back_guard is the guard the first ts$post$ step carries. Steps after the
+ * last ts$post$ are the suffix, guarded by the exit, and join the body.
  */
 
 bool extract_transition_system(
@@ -382,12 +409,13 @@ bool extract_transition_system(
     main_body.instructions.begin(),
     main_body.instructions.end(),
     [](const auto &i) { return i.is_backwards_goto(); });
-  // Only the main loop's own unwinding assertion is expected; without a loop
-  // there is none, and any that appears is a callee's and rejects below.
-  const std::string main_unwinding =
-    main_back == main_body.instructions.end()
-      ? std::string()
-      : "unwinding assertion loop " + std::to_string(main_back->loop_number);
+  // The main loop's back edge, if any. Its unwinding claim and assumption end
+  // the path that takes the back edge, which the TS models itself.
+  const goto_programt::instructiont *main_back_insn =
+    main_back == main_body.instructions.end() ? nullptr : &*main_back;
+  auto at_main_back = [&](const symex_target_equationt::SSA_stept &s) {
+    return &*s.source.pc == main_back_insn;
+  };
 
   optionst opts = options;
   opts.set_option("inductive-step", true);
@@ -429,10 +457,10 @@ bool extract_transition_system(
     steps.push_back(&s);
 
   // Marker regions: [init_first, init_last] [pre_first, pre_last]
-  // [post_first, ...]
+  // [post_first, post_last], then the suffix.
   const size_t none = SIZE_MAX;
   size_t init_first = none, pre_first = none, pre_last = none,
-         post_first = none;
+         post_first = none, post_last = none;
   std::vector<expr2tc> init(n), pre(n), post(n);
   std::vector<int> seen_init(n), seen_pre(n), seen_post(n);
   for (size_t i = 0; i < steps.size(); i++)
@@ -463,6 +491,7 @@ bool extract_transition_system(
         post_first = i;
         ts.back_guard = s.guard;
       }
+      post_last = i;
       post[k] = s.rhs;
       seen_post[k]++;
     }
@@ -471,7 +500,7 @@ bool extract_transition_system(
   {
     // Everything is prefix: `prefix = i < init_first` must hold throughout,
     // and the body and havoc regions must stay empty.
-    init_first = post_first = steps.size();
+    init_first = post_first = post_last = steps.size();
     ts.back_guard = gen_false_expr();
   }
   else
@@ -488,25 +517,10 @@ bool extract_transition_system(
       return false;
     }
   }
-  for (size_t i = 0; i < steps.size(); i++)
+  if (unwinds_inside_step(*eq, main_back_insn))
   {
-    const auto &s = *steps[i];
-    if (!s.is_assert())
-      continue;
-    const std::string &comment = s.comment.as_string();
-    if (
-      i < post_first &&
-      comment.find("unwinding assertion") != std::string::npos)
-    {
-      log_warning("a loop or recursion inside a step runs more than once");
-      return false;
-    }
-    // Exits end a path, so nothing after the loop may be checked.
-    if (i > post_first && comment != main_unwinding)
-    {
-      log_warning("an assertion is reachable after the loop");
-      return false;
-    }
+    log_warning("a loop or recursion inside a step runs more than once");
+    return false;
   }
   std::unordered_set<expr2tc, irep2_hash> distinct;
   for (unsigned k = 0; k < n; k++)
@@ -528,16 +542,20 @@ bool extract_transition_system(
   }
 
   // Prefix [0, init_first), havoc region (init, pre_first), body
-  // (pre_last, post_first).
-  std::unordered_set<expr2tc, irep2_hash> body_lhs;
+  // (pre_last, post_first), suffix (post_last, ...). The suffix runs in the
+  // step that exits, which has no successor, so what it writes is not state.
+  std::unordered_set<expr2tc, irep2_hash> body_lhs, suffix_lhs;
   expr2tc prefix_assumpt = gen_true_expr(), body_assumpt = gen_true_expr();
-  for (size_t i = 0; i < post_first; i++)
+  for (size_t i = 0; i < steps.size(); i++)
   {
     const auto &s = *steps[i];
     const bool prefix = i < init_first;
     const bool havoc = i > init_first && i < pre_first;
-    const bool body = i > pre_last;
-    if (!prefix && !havoc && !body)
+    const bool body = i > pre_last && i < post_first;
+    const bool suffix = i > post_last;
+    if (!prefix && !havoc && !body && !suffix)
+      continue;
+    if (at_main_back(s))
       continue;
     if (s.is_renumber())
     {
@@ -558,7 +576,7 @@ bool extract_transition_system(
       else
       {
         ts.body_defs.push_back(s.cond);
-        body_lhs.insert(s.lhs);
+        (suffix ? suffix_lhs : body_lhs).insert(s.lhs);
       }
     }
     else if (s.is_assume())
@@ -571,7 +589,11 @@ bool extract_transition_system(
         prefix_assumpt = and2tc(prefix_assumpt, s.cond);
       }
       else if (is_only)
-        ts.invariants.push_back(s.cond);
+      {
+        // In the havoc region this is the entry condition, false on exit.
+        if (body)
+          ts.invariants.push_back(s.cond);
+      }
       else
       {
         ts.body_assumes.push_back(s.cond);
@@ -589,8 +611,8 @@ bool extract_transition_system(
     }
   }
 
-  // Step-local: what the body defines, the state at the head, and fresh
-  // inputs. Anything else read by the body is fixed for the whole run.
+  // Step-local: what the body and suffix define, the state at the head, and
+  // fresh inputs. Anything else read by the body is fixed for the whole run.
   std::unordered_set<expr2tc, irep2_hash> body_syms;
   std::unordered_set<const expr2t *> seen;
   auto collect = [&](const expr2tc &e) { collect_symbols(e, body_syms, seen); };
@@ -607,6 +629,7 @@ bool extract_transition_system(
     collect(e);
 
   transition_systemt::step_localt step_local = body_lhs;
+  step_local.insert(suffix_lhs.begin(), suffix_lhs.end());
   for (const auto &e : pre)
     step_local.insert(e);
   for (const auto &e : body_syms)

@@ -44,7 +44,8 @@ class clientt
 public:
   virtual ~clientt() = default;
 
-  // Single chat completion; returns the assistant message content.
+  // Single chat completion; returns the assistant message content. Throws
+  // std::runtime_error when the backend gives no answer.
   virtual std::string complete(const std::vector<message_t> &messages) = 0;
 
   const configt &config() const noexcept

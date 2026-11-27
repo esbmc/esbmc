@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+UNKNOWN\s+\[main\.assertion\.3\]\s+line\s+15\s+i != 50 \(loop invariant too weak
+^VERIFICATION UNKNOWN$

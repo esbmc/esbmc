@@ -1,0 +1,4 @@
+CORE
+main.c
+--llm-invariants
+^ERROR: --llm-invariants needs --llm-command$

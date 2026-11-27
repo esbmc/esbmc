@@ -40,7 +40,8 @@ public:
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
-    unsigned loop_number) override;
+    unsigned loop_number,
+    const expr2tc &havoc_entry) override;
 
   // output
   void output(
@@ -148,8 +149,7 @@ public:
     }
     bool is_event() const
     {
-      return type >= symex_targett::SHARED_READ &&
-             type <= symex_targett::ATOMIC_END;
+      return type >= symex_targett::SHARED_READ && type <= symex_targett::HALT;
     }
     bool adds_no_constraint() const
     {
@@ -162,7 +162,8 @@ public:
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // cond: assume/assert condition, assignment equality, or branch guard.
+    // cond: assume/assert condition, assignment equality, branch guard, or
+    // a --partial-order event's clock.
     // comment interned: assertion messages are a small, highly repetitive
     // set ("dereference failure", "array bounds violated", ...), so
     // irep_idt both shrinks the inline footprint (4 bytes vs a 32-byte
@@ -201,6 +202,10 @@ public:
     // non-ignored assumes and before conversion.
     expr2tc cond_expr;
 
+    // A loop-invariant havoc's assignment: the value lhs held before it, so
+    // that a run from the loop's entry state can be encoded (#11027).
+    expr2tc havoc_entry;
+
     // for slicing
     bool ignore;
 
@@ -236,6 +241,7 @@ public:
             ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
             : nullptr),
         cond_expr(o.cond_expr),
+        havoc_entry(o.havoc_entry),
         ignore(o.ignore),
         hidden(o.hidden),
         loop_number(o.loop_number)
@@ -291,6 +297,75 @@ public:
   typedef std::list<SSA_stept> SSA_stepst;
   SSA_stepst SSA_steps;
 
+  /// A step as one claim's slice sees it: the shared step, read only, and a
+  /// copy of each field the slicers write. The read-only fields keep
+  /// SSA_stept's names, so a slicer reads either alike.
+  class sliced_stept
+  {
+  public:
+    explicit sliced_stept(const SSA_stept &step)
+      : step(step),
+        source(step.source),
+        type(step.type),
+        guard(step.guard),
+        lhs(step.lhs),
+        rhs(step.rhs),
+        original_lhs(step.original_lhs),
+        havoc_entry(step.havoc_entry),
+        comment(step.comment),
+        cond(step.cond),
+        original_rhs(step.original_rhs),
+        ignore(step.ignore),
+        hidden(step.hidden)
+    {
+    }
+
+    const SSA_stept &step;
+    const sourcet &source;
+    const symex_targett::step_typet &type;
+    const expr2tc &guard, &lhs, &rhs, &original_lhs, &havoc_entry;
+    const irep_idt &comment;
+    expr2tc cond, original_rhs;
+    bool ignore, hidden;
+
+    bool is_assert() const
+    {
+      return step.is_assert();
+    }
+    bool is_assignment() const
+    {
+      return step.is_assignment();
+    }
+    bool is_branching() const
+    {
+      return step.is_branching();
+    }
+  };
+
+  /// The steps \p slice keeps of \p whole, with the slicers' writes. The steps
+  /// it cut stay in \p whole, so both must outlive this equation.
+  symex_target_equationt(
+    const symex_target_equationt &whole,
+    const std::vector<sliced_stept> &slice);
+
+  /// Set on an equation built from a claim's slice: every step of the shared
+  /// equation, for the passes that also read the steps the slice cut.
+  const std::vector<sliced_stept> *claim_slice = nullptr;
+
+  /// Visits every step in order: \p held on each step of SSA_steps, \p cut on
+  /// each step the claim slice left in the shared equation. A cut step is
+  /// ignored whatever its own ignore says, and must not be written.
+  template <class Held, class Cut>
+  void for_each_step(Held &&held, Cut &&cut)
+  {
+    visit_steps(*this, held, cut);
+  }
+  template <class Held, class Cut>
+  void for_each_step(Held &&held, Cut &&cut) const
+  {
+    visit_steps(*this, held, cut);
+  }
+
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
     SSA_stepst::iterator it = SSA_steps.begin();
@@ -339,6 +414,25 @@ protected:
 
 private:
   void debug_print_step(const SSA_stept &step) const;
+
+  template <class Equation, class Held, class Cut>
+  static void visit_steps(Equation &eq, Held &held, Cut &cut)
+  {
+    auto it = eq.SSA_steps.begin();
+    if (!eq.claim_slice)
+    {
+      for (; it != eq.SSA_steps.end(); ++it)
+        held(*it);
+      return;
+    }
+    for (const sliced_stept &step : *eq.claim_slice)
+    {
+      if (step.ignore)
+        cut(step.step);
+      else
+        held(*it++);
+    }
+  }
 };
 
 class runtime_encoded_equationt : public symex_target_equationt

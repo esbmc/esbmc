@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^VERIFICATION FAILED$
+\A(?=[\s\S]*\n  tmp = 0 )(?=[\s\S]*\n  m = 0 )(?![\s\S]*\n  x = 1 [\s\S]*\n  (m|tmp) = 0 )

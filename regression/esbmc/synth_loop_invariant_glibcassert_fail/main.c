@@ -1,8 +1,7 @@
 /* The negative half of synth_loop_invariant_glibcassert: the same glibc-shaped
  * assert expansion over a bound that is false at a == 0. The synthesised
- * invariant must not mask it -- the named property is downstream of the
- * invariant havoc, so #7491 reports it unknown rather than failed, but it
- * must still be reported and not pass. */
+ * invariant must not mask it: the first iteration from the loop's entry
+ * state violates it, so it is a real failure (#11027). */
 #include <stdint.h>
 extern void
 __assert_fail(const char *, const char *, unsigned int, const char *);

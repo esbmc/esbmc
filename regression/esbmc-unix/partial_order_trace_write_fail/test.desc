@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^VERIFICATION FAILED$
+\A(?=[\s\S]*thread 1\n-+\n  x = 1 [\s\S]*\n  m = 1 [\s\S]*Violated property)

@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --ts-no-fallback --max-k-step 20
+^VERIFICATION SUCCESSFUL$

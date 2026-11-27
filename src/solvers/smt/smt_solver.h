@@ -928,6 +928,7 @@ public:
   /** Convert a byte_update2tc using bitvector operations, preserving
    *  the original bitvector-based implementation. */
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
+  smt_astt convert_byte_update_as_bits(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
   /** The pointer, floating-point and struct legs of convert_bitcast, split
@@ -1351,6 +1352,13 @@ public:
   std::set<size_t> step_flattens;
   std::string step_assigned;
   expr2tc step_overwritten;
+  /** The pointer byte update the step stores, and where. */
+  expr2tc step_stored;
+  expr2tc step_stored_at;
+  /** The bits each pointer byte update stored, by where it stored them, and
+   *  the context level it was converted at. */
+  std::unordered_map<expr2tc, std::pair<smt_astt, unsigned int>, irep2_hash>
+    stored_pointer_bits;
   size_t flatten_count = 0;
   /** The flattens each SSA symbol's value may hold, and the context level it
    *  was recorded at. */

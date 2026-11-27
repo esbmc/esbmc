@@ -169,7 +169,7 @@ bool symex_slicet::depends_on_tracked(const expr2tc &expr)
 
 bool symex_slicet::reads_sliced(const expr2tc &expr)
 {
-  // run_on_assignment keeps an array version in #depends but drops its stores
+  // slice_assignment keeps an array version in #depends but drops its stores
   // to indices that no kept step reads, so a read of such an index, or of the
   // whole array, is sliced too.
   auto sliced_symbol = [this](const symbol2t &sym, const size_t *elem) {
@@ -248,7 +248,8 @@ bool symex_slicet::reads_sliced_definition(const expr2tc &expr) const
   return false;
 }
 
-void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
+template <class Step>
+void symex_slicet::slice_assert(Step &SSA_step)
 {
   scan_array_uses(SSA_step.guard);
   scan_array_uses(SSA_step.cond);
@@ -256,7 +257,8 @@ void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
   collect_dependencies(SSA_step.cond);
 }
 
-void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
+template <class Step>
+void symex_slicet::slice_assume(Step &SSA_step)
 {
   if (!slice_assumes)
   {
@@ -290,7 +292,8 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
-static bool is_split_field_step(const symex_target_equationt::SSA_stept &step)
+template <class Step>
+static bool is_split_field_step(const Step &step)
 {
   return step.is_assignment() && is_symbol2t(step.original_lhs) &&
          has_prefix(
@@ -298,9 +301,8 @@ static bool is_split_field_step(const symex_target_equationt::SSA_stept &step)
            id2string(to_symbol2t(step.original_lhs).thename) + "::");
 }
 
-symex_target_equationt::SSA_stept *symex_slicet::carry_split_print(
-  symex_target_equationt::SSA_stept &step,
-  symex_target_equationt::SSA_stept *pending)
+template <class Step>
+Step *symex_slicet::carry_split_print(Step &step, Step *pending)
 {
   if (!is_split_field_step(step))
     return nullptr;
@@ -319,8 +321,8 @@ symex_target_equationt::SSA_stept *symex_slicet::carry_split_print(
   return nullptr;
 }
 
-void symex_slicet::run_on_assignment(
-  symex_target_equationt::SSA_stept &SSA_step)
+template <class Step>
+void symex_slicet::slice_assignment(Step &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
@@ -361,6 +363,10 @@ void symex_slicet::run_on_assignment(
   else
   {
     scan_array_uses(SSA_step.guard);
+
+    // bmct::solve_from_loop_entry encodes a kept havoc as this value.
+    scan_array_uses(SSA_step.havoc_entry);
+    collect_dependencies(SSA_step.havoc_entry);
 
     const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
 
@@ -437,7 +443,8 @@ void symex_slicet::run_on_assignment(
   }
 }
 
-void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
+template <class Step>
+void symex_slicet::slice_renumber(Step &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
@@ -455,7 +462,8 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-void symex_slicet::run_on_event(symex_target_equationt::SSA_stept &SSA_step)
+template <class Step>
+void symex_slicet::slice_event(Step &SSA_step)
 {
   collect_dependencies(SSA_step.guard);
   if (SSA_step.type == symex_targett::SHARED_WRITE)
@@ -464,6 +472,103 @@ void symex_slicet::run_on_event(symex_target_equationt::SSA_stept &SSA_step)
     scan_array_uses(SSA_step.lhs);
     collect_dependencies(SSA_step.lhs);
   }
+}
+
+template <class Step>
+void symex_slicet::slice_step(Step &step)
+{
+  switch (step.type)
+  {
+  case symex_targett::ASSIGNMENT:
+    slice_assignment(step);
+    break;
+  case symex_targett::ASSUME:
+    slice_assume(step);
+    break;
+  case symex_targett::ASSERT:
+    slice_assert(step);
+    break;
+  case symex_targett::RENUMBER:
+    slice_renumber(step);
+    break;
+  case symex_targett::HALT:
+  case symex_targett::SHARED_READ:
+  case symex_targett::SHARED_WRITE:
+  case symex_targett::SPAWN:
+  case symex_targett::JOIN:
+  case symex_targett::ATOMIC_BEGIN:
+  case symex_targett::ATOMIC_END:
+  case symex_targett::LOCK:
+  case symex_targett::UNLOCK:
+    slice_event(step);
+    break;
+  case symex_targett::OUTPUT:
+  case symex_targett::SKIP:
+  case symex_targett::BREANCHING:
+    break;
+  }
+}
+
+template <class Steps>
+bool symex_slicet::run_on(Steps &eq)
+{
+  // The slicer object is reused across equations (e.g. incremental-bmc /
+  // k-induction run it once per produced formula). Each formula must be
+  // sliced independently, so clear all per-equation state up front.
+  // (Previously only `sliced` was reset, leaking `depends` across equations.)
+  sliced = 0;
+  depends.clear();
+  collected_cache.clear();
+  index_reads.clear();
+  array_disqualified.clear();
+  scanned_cache.clear();
+  sliced_reads.clear();
+  sliced_definitions.clear();
+
+  fine_timet algorithm_start = current_time();
+  typename Steps::value_type *sliced_print = nullptr;
+  for (auto &step : boost::adaptors::reverse(eq))
+  {
+    if (step.ignore)
+      continue;
+    slice_step(step);
+    if (hide_unconstrained_prints)
+      sliced_print = carry_split_print(step, sliced_print);
+  }
+  // A branching step only steers the witness, so its guard and cond are not
+  // dependencies. Where they read a value the slicer removed, the model's
+  // value for it is arbitrary and the waypoint may be infeasible (#9884):
+  // drop the step rather than keep that definition.
+  for (auto &step : eq)
+    if (
+      step.is_branching() && !step.ignore &&
+      (reads_sliced(step.guard) || reads_sliced(step.cond)))
+      step.ignore = true;
+  // A split struct's whole write prints a right-hand side its kept field
+  // steps may not read. Where that reads a definition the slicer removed,
+  // the model's value for it is arbitrary (#10801): hide the step.
+  if (hide_unconstrained_prints)
+    for (auto &step : eq)
+      if (
+        step.is_assignment() && !step.ignore && !step.hidden &&
+        reads_sliced_definition(step.original_rhs))
+        step.hidden = true;
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Slicing time: {}s (removed {} assignments)",
+    time2string(algorithm_stop - algorithm_start),
+    sliced);
+  return true;
+}
+
+bool symex_slicet::run(symex_target_equationt::SSA_stepst &eq)
+{
+  return run_on(eq);
+}
+
+bool symex_slicet::run(std::vector<symex_target_equationt::sliced_stept> &eq)
+{
+  return run_on(eq);
 }
 
 /**
@@ -503,16 +608,15 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
   return true;
 }
 
-bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
+template <class Steps>
+bool claim_slicer::run_on(Steps &steps)
 {
   sliced = 0;
   claim_after_invariant_havoc = false;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
   bool seen_invariant_havoc = false;
-  for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
-       it != steps.end();
-       ++it)
+  for (auto it = steps.begin(); it != steps.end(); ++it)
   {
     // Symex emits a linear trace, so once the loop-invariant schema's havoc
     // has run every later claim on it is in the abstract state.
@@ -565,6 +669,16 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
       time2string(algorithm_stop - algorithm_start));
 
   return true;
+}
+
+bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
+{
+  return run_on(steps);
+}
+
+bool claim_slicer::run(std::vector<symex_target_equationt::sliced_stept> &steps)
+{
+  return run_on(steps);
 }
 
 std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)

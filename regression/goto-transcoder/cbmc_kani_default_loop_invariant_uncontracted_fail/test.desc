@@ -1,0 +1,7 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying loop contracts by incremental BMC$
+^Processing 1 loop invariant$
+deep bug in uncontracted loop
+^VERIFICATION FAILED$

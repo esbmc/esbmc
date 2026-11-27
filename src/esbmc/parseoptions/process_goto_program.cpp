@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <limits>
+#include <sstream>
 #include <util/arith/ieee_float.h>
 #include <util/expr/expr_util.h>
 #include <iostream>
@@ -33,6 +34,9 @@
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
+#ifdef ENABLE_LLM
+#  include <esbmc/llm_invariant_synthesis.h>
+#endif
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_array_loop_summary.h>
 #include <goto-programs/goto_invariant_synthesis.h>
@@ -251,6 +255,14 @@ static bool array_loop_summary_disabled(const cmdlinet &cmdline)
     if (cmdline.isset(opt))
       return true;
   return false;
+}
+
+/// --partial-order checks races on its events after symex instead.
+static bool adds_race_assertions(const cmdlinet &cmdline)
+{
+  return !cmdline.isset("partial-order") &&
+         (cmdline.isset("data-races-check") ||
+          cmdline.isset("data-races-check-only"));
 }
 
 static void configure_branch_instrumentation(
@@ -809,9 +821,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_functions.update();
 
-    if (
-      cmdline.isset("data-races-check") ||
-      cmdline.isset("data-races-check-only"))
+    if (adds_race_assertions(cmdline))
     {
       log_status("Adding Data Race Checks");
       options.set_option("data-races-check", true);
@@ -1119,7 +1129,33 @@ void esbmc_parseoptionst::apply_loop_invariants(
   if (cmdline.isset("houdini-loop-invariants"))
     return;
 
-  if (cmdline.isset("synthesise-loop-invariants"))
+  const bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  const bool llm = cmdline.isset("llm-invariants");
+  if (llm && k_induction_ran)
+    log_warning(
+      "--llm-invariants added no invariant: the k-induction "
+      "transform has already rewritten the loop heads. Drop the k-induction "
+      "phase to use it");
+#ifdef ENABLE_LLM
+  else if (llm)
+  {
+    llm::configt cfg;
+    cfg.backend = llm::backendt::cli;
+    std::istringstream command(cmdline.getval("llm-command"));
+    command >> cfg.executable;
+    for (std::string arg; command >> arg;)
+      cfg.extra_args.push_back(arg);
+    cfg.timeout_ms = 1000u * unsigned(atoi(cmdline.getval("llm-timeout")));
+    llm_synthesise_loop_invariants(
+      goto_functions,
+      context,
+      options,
+      *llm::make_client(cfg),
+      atoi(cmdline.getval("llm-max-rounds")),
+      use_frame_rule);
+  }
+#endif
+  else if (cmdline.isset("synthesise-loop-invariants"))
     // Read from `options`, the same object goto_check consults
     // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
     // instead happens to agree today only because nothing calls
@@ -1132,6 +1168,5 @@ void esbmc_parseoptionst::apply_loop_invariants(
         options.get_bool_option("unsigned-overflow-check")},
       k_induction_ran);
 
-  bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);
 }

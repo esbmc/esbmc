@@ -1099,10 +1099,31 @@ bool goto_symex_statet::constant_propagation_reference(
   return false;
 }
 
+/// The value reads of @p lhs fold to once it is assigned @p rhs, nil for none,
+/// with the @p updates to carry over the name it defines instead.
+static expr2tc propagated_value(
+  const goto_symex_statet &state,
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  std::vector<const with2t *> &updates)
+{
+  if (!state.constant_propagation(rhs))
+    return expr2tc();
+  updates = split_chain_updates(state, rhs, lhs);
+  if (updates.empty() && exposes_foreign_pointer(rhs, to_symbol2t(lhs)))
+  {
+    updates = rebased_updates(rhs, to_symbol2t(lhs));
+    if (updates.empty())
+      return expr2tc();
+  }
+  return rhs;
+}
+
 void goto_symex_statet::assignment(
   expr2tc &lhs,
   const expr2tc &rhs,
-  bool update_value_set)
+  bool update_value_set,
+  bool propagate)
 {
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
@@ -1118,18 +1139,9 @@ void goto_symex_statet::assignment(
 
   expr2tc l1_lhs = lhs;
 
-  expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
-  std::vector<const with2t *> updates =
-    is_nil_expr(const_value) ? std::vector<const with2t *>()
-                             : split_chain_updates(*this, const_value, lhs);
-  if (
-    updates.empty() && !is_nil_expr(const_value) &&
-    exposes_foreign_pointer(const_value, to_symbol2t(lhs)))
-  {
-    updates = rebased_updates(const_value, to_symbol2t(lhs));
-    if (updates.empty())
-      const_value = expr2tc();
-  }
+  std::vector<const with2t *> updates;
+  expr2tc const_value =
+    propagate ? propagated_value(*this, lhs, rhs, updates) : expr2tc();
   level2.make_assignment(lhs, updates.empty() ? const_value : expr2tc(), rhs);
   // The same updates over the name just defined, which they hold on.
   if (!updates.empty())

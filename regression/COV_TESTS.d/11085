@@ -1,0 +1,10 @@
+regression/goto-transcoder/github_11085
+regression/goto-transcoder/github_11085_fail
+regression/goto-transcoder/github_11085_do_while_kinduction
+regression/goto-transcoder/github_11085_do_while_kinduction_fail
+regression/goto-transcoder/github_11085_inner
+regression/goto-transcoder/github_11085_inner_fail
+regression/goto-transcoder/github_11085_do_while
+regression/goto-transcoder/github_11085_do_while_fail
+regression/goto-transcoder/github_11085_reset
+regression/goto-transcoder/github_11085_reset_fail

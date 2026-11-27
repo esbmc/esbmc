@@ -286,6 +286,7 @@ void convert_internal_step(
   else if (step.is_output())
   {
     symex_target_equationt::SSA_stept::output_datat &od = step.output_payload();
+    od.converted_output_args.clear();
     for (const expr2tc &tmp : od.output_args)
     {
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
@@ -327,6 +328,35 @@ void convert_internal_step(
 }
 } // namespace
 
+symex_target_equationt::symex_target_equationt(
+  const symex_target_equationt &whole,
+  const std::vector<sliced_stept> &slice)
+  : claim_slice(&slice),
+    ns(whole.ns),
+    debug_print(whole.debug_print),
+    ssa_trace(whole.ssa_trace),
+    ssa_smt_trace(whole.ssa_smt_trace),
+    output_count(whole.output_count)
+{
+  for (const sliced_stept &step : slice)
+  {
+    if (step.ignore)
+    {
+      // for_each_step hands out a cut step as the shared one.
+      assert(
+        step.cond.get() == step.step.cond.get() &&
+        step.original_rhs.get() == step.step.original_rhs.get() &&
+        step.hidden == step.step.hidden);
+      continue;
+    }
+    SSA_stept &held = SSA_steps.emplace_back(step.step);
+    held.cond = step.cond;
+    held.original_rhs = step.original_rhs;
+    held.ignore = false;
+    held.hidden = step.hidden;
+  }
+}
+
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
   std::ostringstream oss;
@@ -343,7 +373,8 @@ void symex_target_equationt::assignment(
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
   const bool hidden,
-  unsigned loop_number)
+  unsigned loop_number,
+  const expr2tc &havoc_entry)
 {
   assert(!is_nil_expr(lhs));
 
@@ -362,6 +393,7 @@ void symex_target_equationt::assignment(
   if (!stack_trace.empty())
     SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
+  SSA_step.havoc_entry = havoc_entry;
 
   if (debug_print)
     debug_print_step(SSA_step);
@@ -531,16 +563,21 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
       });
   }
 
-  for (auto &SSA_step : SSA_steps)
-    convert_internal_step(
-      ns,
-      ssa_trace,
-      ssa_smt_trace,
-      output_count,
-      smt_conv,
-      state,
-      SSA_step,
-      mode);
+  for_each_step(
+    [&](SSA_stept &step) {
+      convert_internal_step(
+        ns,
+        ssa_trace,
+        ssa_smt_trace,
+        output_count,
+        smt_conv,
+        state,
+        step,
+        mode);
+    },
+    [&](const SSA_stept &step) {
+      register_sliced_addresses(ns, smt_conv, state, step);
+    });
 
   if (!state.assertions.empty())
     smt_conv.assert_expr(disjunction(state.assertions));
@@ -628,6 +665,15 @@ void symex_target_equationt::SSA_stept::output(
     break;
   case symex_targett::ATOMIC_END:
     out << "ATOMIC_END\n";
+    break;
+  case symex_targett::LOCK:
+    out << "LOCK " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
+  case symex_targett::UNLOCK:
+    out << "UNLOCK " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
+  case symex_targett::HALT:
+    out << "HALT\n";
     break;
 
   default:

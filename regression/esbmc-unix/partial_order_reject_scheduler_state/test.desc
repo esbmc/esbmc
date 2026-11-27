@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support the scheduler state __ESBMC_num_threads_running yet, at file .*main\.c line 13 column 3 function main$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

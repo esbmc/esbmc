@@ -4,9 +4,11 @@
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
+#include <list>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 static bool reads_through_dereference(const expr2tc &e);
 
@@ -299,6 +301,7 @@ using nondet_originst =
 static void record_nondet_return(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
+  bool ignored,
   std::list<goto_trace_stept::nondet_returnt> &out,
   nondet_originst &origin)
 {
@@ -322,7 +325,7 @@ static void record_nondet_return(
       ambiguous = true;
     nondet = symbol;
   }
-  if (!nondet || ambiguous || step.ignore)
+  if (!nondet || ambiguous || ignored)
     return;
 
   // Other nondet assignments (an uninitialised local, a contract's havoc of a
@@ -457,12 +460,12 @@ struct race_flag_trackert
 
   void note_assignment(
     smt_convt &smt_conv,
-    const symex_target_equationt::SSA_stept &step)
+    const symex_target_equationt::SSA_stept &step,
+    bool ignored)
   {
     if (
       !step.is_assignment() || !is_races_flag(step.lhs) ||
-      !is_with2t(step.rhs) || step.ignore ||
-      !smt_conv.l_get(step.guard).is_true())
+      !is_with2t(step.rhs) || ignored || !smt_conv.l_get(step.guard).is_true())
       return;
 
     const with2t &with = to_with2t(step.rhs);
@@ -546,11 +549,193 @@ static bool is_bookkeeping(const symex_target_equationt::SSA_stept &step)
   return step.hidden || step.is_event();
 }
 
+namespace
+{
+/// Where a step falls in a --partial-order execution: just before an event,
+/// or just after one.
+struct po_positiont
+{
+  BigInt clock;
+  bool after = false;
+
+  bool operator<(const po_positiont &other) const
+  {
+    return clock != other.clock ? clock < other.clock : after < other.after;
+  }
+};
+
+using stept = symex_target_equationt::SSA_stept;
+using po_positionst = std::unordered_map<const stept *, po_positiont>;
+using clockst = std::unordered_map<const stept *, BigInt>;
+
+clockst event_clocks(const symex_target_equationt &target, smt_convt &smt_conv)
+{
+  clockst clocks;
+  for (const stept &step : target.SSA_steps)
+    if (step.is_event() && !is_nil_expr(step.cond))
+      if (
+        const expr2tc clock = smt_conv.get(step.cond); is_constant_int2t(clock))
+        clocks[&step] = to_constant_int2t(clock).value;
+  return clocks;
+}
+
+/// The next event with a clock in each step's thread.
+std::unordered_map<const stept *, const stept *>
+next_events(const symex_target_equationt &target, const clockst &clocks)
+{
+  std::unordered_map<const stept *, const stept *> next_event;
+  std::map<unsigned, const stept *> next;
+  for (auto it = target.SSA_steps.rbegin(); it != target.SSA_steps.rend(); ++it)
+  {
+    if (clocks.count(&*it))
+      next[it->source.thread_nr] = &*it;
+    else if (auto n = next.find(it->source.thread_nr); n != next.end())
+      next_event[&*it] = n->second;
+  }
+  return next_event;
+}
+
+/// A step follows the last event of its thread, except that the assignment a
+/// write event records goes with that write. A thread with no event follows
+/// its spawn.
+po_positionst
+po_positions(const symex_target_equationt &target, const clockst &clocks)
+{
+  const auto next_event = next_events(target, clocks);
+  po_positionst positions;
+  std::map<unsigned, BigInt> last, spawned_at;
+  for (const stept &step : target.SSA_steps)
+  {
+    const unsigned thread = step.source.thread_nr;
+    if (auto c = clocks.find(&step); c != clocks.end())
+    {
+      last[thread] = c->second;
+      if (step.type == symex_targett::SPAWN)
+        spawned_at[to_constant_int2t(step.lhs).value.to_uint64()] = c->second;
+      continue;
+    }
+
+    auto n = next_event.find(&step);
+    auto l = last.find(thread);
+    if (
+      n != next_event.end() &&
+      (l == last.end() || &*n->second->source.pc == &*step.source.pc))
+      positions[&step] = {clocks.at(n->second), false};
+    else if (l != last.end())
+      positions[&step] = {l->second, true};
+    else
+      positions[&step] = {spawned_at[thread], true};
+  }
+  return positions;
+}
+
+/// Merge the threads' steps by position, keeping each thread's own order
+/// even where a sliced constraint left two of its clocks unordered.
+void merge_threads(
+  goto_tracet &goto_trace,
+  const std::vector<po_positiont> &positions)
+{
+  std::map<unsigned, std::list<size_t>> queues;
+  std::vector<goto_tracet::stepst::iterator> steps;
+  for (auto it = goto_trace.steps.begin(); it != goto_trace.steps.end(); ++it)
+  {
+    queues[it->thread_nr].push_back(steps.size());
+    steps.push_back(it);
+  }
+
+  goto_tracet::stepst ordered;
+  while (!queues.empty())
+  {
+    auto first = queues.begin();
+    for (auto q = std::next(first); q != queues.end(); ++q)
+    {
+      const size_t a = q->second.front(), b = first->second.front();
+      if (
+        positions[a] < positions[b] ||
+        (!(positions[b] < positions[a]) && a < b))
+        first = q;
+    }
+    ordered.splice(
+      ordered.end(), goto_trace.steps, steps[first->second.front()]);
+    first->second.pop_front();
+    if (first->second.empty())
+      queues.erase(first);
+  }
+  goto_trace.steps.swap(ordered);
+
+  unsigned step_nr = 0;
+  for (goto_trace_stept &step : goto_trace.steps)
+    step.step_nr = ++step_nr;
+}
+
+/// The merge can put a spawned thread's steps before the parent's step that
+/// carries the spawn, and a witness registers a thread only before its first
+/// waypoint (#10749). Move each spawn to the earlier of the two, keeping the
+/// spawns in creation order.
+void place_spawns(goto_tracet &goto_trace)
+{
+  using spawnt = goto_trace_stept::spawnt;
+  std::vector<goto_trace_stept *> steps;
+  std::map<unsigned, size_t> first_step;
+  std::vector<std::pair<size_t, spawnt>> spawns;
+  for (goto_trace_stept &step : goto_trace.steps)
+  {
+    first_step.try_emplace(step.thread_nr, steps.size());
+    for (spawnt &spawn : step.spawns)
+      spawns.emplace_back(steps.size(), std::move(spawn));
+    step.spawns.clear();
+    steps.push_back(&step);
+  }
+
+  size_t bound = steps.size();
+  for (auto it = spawns.rbegin(); it != spawns.rend(); ++it)
+  {
+    auto &[at, spawn] = *it;
+    const auto child = first_step.find(spawn.thread_nr);
+    const size_t earliest =
+      std::min({at, bound, child == first_step.end() ? at : child->second});
+    if (earliest != at)
+      spawn.nondet_returns_before = 0;
+    at = bound = earliest;
+  }
+
+  for (auto &[at, spawn] : spawns)
+  {
+    std::list<spawnt> &placed = steps[at]->spawns;
+    if (!placed.empty())
+      spawn.nondet_returns_before = std::max(
+        spawn.nondet_returns_before, placed.back().nondet_returns_before);
+    placed.push_back(std::move(spawn));
+  }
+}
+
+/// Under --partial-order symex lists each thread whole; the clocks the
+/// memory model gave the events say how the threads interleave. \p sources
+/// holds the SSA step of each trace step.
+void order_by_clock(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  goto_tracet &goto_trace,
+  const std::vector<const stept *> &sources)
+{
+  const clockst clocks = event_clocks(target, smt_conv);
+  if (clocks.empty())
+    return;
+  const po_positionst positions = po_positions(target, clocks);
+  std::vector<po_positiont> trace_positions;
+  for (const stept *step : sources)
+    trace_positions.push_back(positions.at(step));
+  merge_threads(goto_trace, trace_positions);
+  place_spawns(goto_trace);
+}
+} // namespace
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
+  std::vector<const symex_target_equationt::SSA_stept *> sources;
   unsigned step_nr = 0;
   input_trackert inputs;
   race_flag_trackert race_flags;
@@ -566,20 +751,24 @@ void build_goto_trace(
   // cleared on every solve / context change), so the thousands of repeated
   // guard-AST queries this loop issues collapse to one solver call each
   // without any explicit scope management here.
-  for (auto const &SSA_step : target.SSA_steps)
-  {
-    inputs.note_assignment(SSA_step);
-    race_flags.note_assignment(smt_conv, SSA_step);
-    record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_origin);
-    record_spawn(smt_conv, SSA_step, nondet_returns.size(), spawns);
+  auto record =
+    [&](const symex_target_equationt::SSA_stept &step, bool ignored) {
+      inputs.note_assignment(step);
+      race_flags.note_assignment(smt_conv, step, ignored);
+      record_nondet_return(
+        smt_conv, step, ignored, nondet_returns, nondet_origin);
+      record_spawn(smt_conv, step, nondet_returns.size(), spawns);
+    };
+  auto trace_step = [&](const symex_target_equationt::SSA_stept &SSA_step) {
+    record(SSA_step, SSA_step.ignore);
 
     if (is_bookkeeping(SSA_step))
-      continue;
+      return;
 
     // is_true() also drops steps whose guard the solver could not evaluate:
     // such a step has no authentic state to report (see #6191).
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
-      continue;
+      return;
 
     goto_trace_stept goto_trace_step;
 
@@ -615,7 +804,7 @@ void build_goto_trace(
           "trace",
           "skipping assignment at {} (symbolic type)",
           SSA_step.source.pc->location.as_string());
-        continue;
+        return;
       }
       catch (const array_type2t::dyn_sized_array_excp &e)
       {
@@ -623,7 +812,7 @@ void build_goto_trace(
           "trace",
           "skipping assignment at {} (symbolic-size array, e.g. argv)",
           SSA_step.source.pc->location.as_string());
-        continue;
+        return;
       }
     }
 
@@ -666,7 +855,13 @@ void build_goto_trace(
     goto_trace_step.spawns.swap(spawns);
 
     goto_trace.steps.push_back(goto_trace_step);
-  }
+    sources.push_back(&SSA_step);
+  };
+  target.for_each_step(
+    trace_step,
+    [&](const symex_target_equationt::SSA_stept &step) { record(step, true); });
+
+  order_by_clock(target, smt_conv, goto_trace, sources);
 }
 
 void build_successful_goto_trace(

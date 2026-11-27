@@ -1036,9 +1036,19 @@ bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
          is_partial_order_global(ns, to_symbol2t(e).thename);
 }
 
-/// The array an assignment to \p lhs writes an element of, or nil.
-expr2tc assigned_array(const expr2tc &lhs)
+/// The object an assignment to \p lhs writes. A compound assignment to an
+/// object narrower than int assigns to its promotion, \c (int)c.
+expr2tc strip_lvalue_casts(expr2tc lhs)
 {
+  while (is_typecast2t(lhs) || is_bitcast2t(lhs))
+    lhs = is_typecast2t(lhs) ? to_typecast2t(lhs).from : to_bitcast2t(lhs).from;
+  return lhs;
+}
+
+/// The array an assignment to \p lhs writes an element of, or nil.
+expr2tc assigned_array(const expr2tc &full_lhs)
+{
+  const expr2tc lhs = strip_lvalue_casts(full_lhs);
   if (!is_index2t(lhs))
     return expr2tc();
   expr2tc root = lhs;
@@ -1050,6 +1060,7 @@ expr2tc assigned_array(const expr2tc &lhs)
 /// The pointer an assignment to \p lhs writes through, or nil.
 expr2tc assigned_pointer(expr2tc lhs)
 {
+  lhs = strip_lvalue_casts(lhs);
   while (is_index2t(lhs))
     lhs = to_index2t(lhs).source_value;
   return is_dereference2t(lhs) ? to_dereference2t(lhs).value : expr2tc();
@@ -1197,7 +1208,11 @@ bool execution_statet::partial_order_update(
   // write may follow before the update.
   expr2tc lhs = assign.target;
   std::function<void(expr2tc &)> snapshot_operands = [&](expr2tc &e) {
-    if (is_index2t(e))
+    if (is_typecast2t(e))
+      snapshot_operands(to_typecast2t(e).from);
+    else if (is_bitcast2t(e))
+      snapshot_operands(to_bitcast2t(e).from);
+    else if (is_index2t(e))
     {
       index2t &index = to_index2t(e);
       snapshot_operands(index.source_value);
@@ -1237,7 +1252,7 @@ void execution_statet::record_shared_write(const expr2tc &code)
   if (is_nil_expr(code) || cur_state->guard.is_false())
     return;
 
-  expr2tc sym = to_code_assign2t(code).target;
+  expr2tc sym = strip_lvalue_casts(to_code_assign2t(code).target);
   if (!is_symbol2t(sym))
     return;
   cur_state->get_original_name(sym);
@@ -1255,15 +1270,30 @@ void execution_statet::record_shared_write(const expr2tc &code)
 
 void execution_statet::record_thread_event(
   symex_targett::step_typet type,
-  unsigned int tid)
+  unsigned int tid,
+  const expr2tc &cond)
 {
   if (!partial_order || cur_state->guard.is_false())
     return;
+  guard2tc guard = cur_state->guard;
+  if (!is_nil_expr(cond))
+    guard.add(cond);
   target->event(
-    cur_state->guard.as_expr(),
+    guard.as_expr(),
     type,
     constant_int2tc(get_uint32_type(), BigInt(tid)),
     cur_state->source);
+}
+
+bool execution_statet::halt_thread_at_bound(const expr2tc &cont)
+{
+  if (!partial_order || options.get_bool_option("deadlock-check"))
+    return false;
+  guard2tc guard = cur_state->guard;
+  guard.add(cont);
+  target->event(
+    guard.as_expr(), symex_targett::HALT, expr2tc(), cur_state->source);
+  return true;
 }
 
 void execution_statet::record_atomic_event(
@@ -1284,8 +1314,98 @@ void execution_statet::symex_call(
   reachability_treet &art,
   const goto_programt::instructiont &instruction)
 {
-  if (!partial_order_join(instruction))
-    goto_symext::symex_step(art);
+  if (
+    partial_order_join(instruction) || partial_order_mutex(instruction) ||
+    partial_order_exit(instruction))
+    return;
+
+  const expr2tc &function = to_code_function_call2t(instruction.code).function;
+  const irep_idt name =
+    is_symbol2t(function) ? to_symbol2t(function).thename : irep_idt();
+  if (name == "c:@F@__ESBMC_really_atomic_begin")
+    record_atomic_event(symex_targett::ATOMIC_BEGIN, instruction);
+  else if (name == "c:@F@__ESBMC_really_atomic_end")
+    record_atomic_event(symex_targett::ATOMIC_END, instruction);
+  goto_symext::symex_step(art);
+}
+
+bool execution_statet::partial_order_exit(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (!partial_order || !is_symbol2t(call.function))
+    return false;
+  const irep_idt &name = to_symbol2t(call.function).thename;
+  // The operational model's trampoline ends every thread this way.
+  const bool terminate = name == "c:@F@__ESBMC_terminate_thread" &&
+                         !file_operations::is_bundled_source(
+                           instruction.location.get_file().as_string());
+  if (name != "c:@F@pthread_exit" && !terminate)
+    return false;
+
+  cur_state->guard.make_false();
+  cur_state->source.pc++;
+  return true;
+}
+
+void execution_statet::return_zero(const code_function_call2t &call)
+{
+  if (is_nil_expr(call.ret))
+    return;
+  expr2tc ret = call.ret;
+  dereference(ret, dereferencet::WRITE);
+  symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
+}
+
+bool execution_statet::partial_order_mutex(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (!partial_order || !is_symbol2t(call.function))
+    return false;
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  const bool lock = name.starts_with("c:@F@pthread_mutex_lock");
+  const bool unlock = name.starts_with("c:@F@pthread_mutex_unlock");
+  // POSIX allows spurious wakeups, and the operational model takes one at
+  // will, so a wait is an unlock followed by a lock.
+  const bool wait = name.starts_with("c:@F@pthread_cond_wait");
+  if (!lock && !unlock && !wait)
+    return false;
+
+  if (!cur_state->guard.is_false())
+  {
+    expr2tc mutex = call.operands.at(wait ? 1 : 0);
+    cur_state->rename(mutex);
+    simplify(mutex);
+    const expr2tc obj =
+      is_address_of2t(mutex) ? to_address_of2t(mutex).ptr_obj : expr2tc();
+    if (
+      is_nil_expr(obj) || !is_symbol2t(obj) ||
+      !is_partial_order_global(ns, to_symbol2t(obj).thename))
+    {
+      log_error(
+        "--partial-order needs a mutex that is a global known during "
+        "symbolic execution, at {}",
+        instruction.location.as_string());
+      abort();
+    }
+    const expr2tc sym = symbol2tc(obj->type, to_symbol2t(obj).thename);
+    if (!lock)
+      target->event(
+        cur_state->guard.as_expr(),
+        symex_targett::UNLOCK,
+        sym,
+        cur_state->source);
+    if (!unlock)
+      target->event(
+        cur_state->guard.as_expr(),
+        symex_targett::LOCK,
+        sym,
+        cur_state->source);
+    return_zero(call);
+  }
+  cur_state->source.pc++;
+  return true;
 }
 
 bool execution_statet::partial_order_join(
@@ -1304,23 +1424,19 @@ bool execution_statet::partial_order_join(
     expr2tc tid = call.operands.at(0);
     cur_state->rename(tid);
     simplify(tid);
-    if (!is_constant_int2t(tid))
-    {
-      log_error(
-        "--partial-order needs the thread a join waits for to be known "
-        "during symbolic execution, at {}",
-        instruction.location.as_string());
-      abort();
-    }
-    record_thread_event(
-      symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
-
-    if (!is_nil_expr(call.ret))
-    {
-      expr2tc ret = call.ret;
-      dereference(ret, dereferencet::WRITE);
-      symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
-    }
+    if (is_constant_int2t(tid))
+      record_thread_event(
+        symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
+    else
+      // A thread id merged from paths that spawned different threads, as
+      // after a loop with a symbolic bound.
+      for (unsigned int k = 0; k < threads_state.size(); ++k)
+        if (k != active_thread)
+          record_thread_event(
+            symex_targett::JOIN,
+            k,
+            equality2tc(tid, constant_int2tc(tid->type, BigInt(k))));
+    return_zero(call);
   }
   cur_state->source.pc++;
   return true;
