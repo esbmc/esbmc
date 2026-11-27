@@ -207,7 +207,8 @@ void register_sliced_addresses(
       // Only the base, and only of constant size: anything else would encode
       // SSA symbols the slicer may have left unassigned (#10293).
       if (is_symbol2t(obj) && !has_variable_size(ns, obj->type))
-        smt_conv.convert_ast(address_of2tc(pointer_type2tc(obj->type), obj));
+        smt_conv.convert_laid_out_lazily(
+          address_of2tc(pointer_type2tc(obj->type), obj));
     }
     e->foreach_operand([&](const expr2tc &op) { walk(op); });
   };
