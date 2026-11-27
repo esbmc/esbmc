@@ -1,7 +1,6 @@
 /* Negative counterpart of houdini_branchy_int: the loop may run zero times,
- * leaving x == 5, so x >= 6 does not hold. The claim is downstream of the
- * invariant havoc, so #7480 reports it unknown rather than failed -- but it
- * must still be reported, and must not pass. */
+ * leaving x == 5, so x >= 6 does not hold. The loop's entry state violates
+ * it, so it is a real failure (#11027). */
 #include <assert.h>
 
 int main()
