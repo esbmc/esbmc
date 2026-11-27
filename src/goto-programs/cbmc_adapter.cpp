@@ -1066,7 +1066,8 @@ void fix_expression(irept &irep)
     "exists",
     // goto-cc removes the comma operator from code but keeps it in a loop
     // invariant.
-    "comma"};
+    "comma",
+    "unary+"};
 
   const std::string cur = irep.id_string();
 
