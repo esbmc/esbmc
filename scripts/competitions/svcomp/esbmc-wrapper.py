@@ -496,6 +496,21 @@ def strategy_flags(strat):
   exit(1)
 
 
+PARTIAL_ORDER_PROPERTIES = (Property.reach, Property.datarace)
+# The scope check and the flag-conflict check both name the option.
+PARTIAL_ORDER_REJECTED = re.compile(r"^ERROR: .*--partial-order\b", re.MULTILINE)
+
+
+def partial_order_command_line(command_line, strat):
+  """--partial-order needs no context bound but rejects k-induction, state
+  hashing and --data-races-check-only, so it runs as incremental BMC with the
+  race claims beside the property's (none, under --no-assertions)."""
+  return (command_line.replace(strategy_flags(strat), "--incremental-bmc ")
+          .replace("--state-hashing ", "")
+          .replace("--data-races-check-only ", "--data-races-check ")
+          + "--partial-order ")
+
+
 def python_exception_flags(prop):
   """Report only the property's own exception family. Any other uncaught
   exception ends its path unreported, as CPython stops there, and the
@@ -1102,7 +1117,8 @@ def has_invariants(witness_path):
     return re.search(r"\binvariant\b", f.read()) is not None
 
 
-def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate_mode):
+def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate_mode,
+           partial_order=False):
   if witness_path and validate_mode == "violation":
     strat = "incr"
 
@@ -1119,6 +1135,11 @@ def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate
     esbmc_command_line += "--witness " + witness_path + " "
 
   started = time.monotonic()
+  if (partial_order and not witness_path and prop in PARTIAL_ORDER_PROPERTIES
+      and check_if_benchmark_contains_pthread(benchmark)):
+    output = run(partial_order_command_line(esbmc_command_line, strat)).decode()
+    if not PARTIAL_ORDER_REJECTED.search(output):
+      return parse_result(output, prop)
   if prop == Property.overflow and "--k-induction " in esbmc_command_line:
     # The inductive step proves most no-overflow loops in seconds, but on
     # nonlinear arithmetic its solve can stall, and on goto-heavy code it can
@@ -1364,6 +1385,9 @@ if __name__ == "__main__":
                       help="Validate a correctness witness (use with --witness)")
   parser.add_argument("-o", "--coverage", help="Test-Comp: coverage criterion for the generated tests",
                       choices=["branch", "branch-function", "condition"])
+  parser.add_argument("--partial-order", action='store_true',
+                      help="verify a threaded unreach-call or no-data-race task with ESBMC's "
+                      "--partial-order, falling back to the default when it rejects the task")
 
   args = parser.parse_args()
 
@@ -1423,6 +1447,7 @@ if __name__ == "__main__":
   if category_property in PYTHON_EXCEPTION_FAMILIES:
     add_python_module_path(benchmark)
 
-  result = verify(strategy, category_property, arch, benchmark, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
+  result = verify(strategy, category_property, arch, benchmark, esbmc_dargs, esbmc_ci, witness_path, validate_mode,
+                  args.partial_order)
 
   print(get_result_string(result))
