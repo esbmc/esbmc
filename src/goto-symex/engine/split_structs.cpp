@@ -417,8 +417,8 @@ void split_structst::add_fields(
   const size_t count = elements ? elements : st.members.size();
   for (size_t k = 0; k < count; k++)
   {
-    const type2tc &field_type = elements ? to_array_type(type).subtype
-                                         : st.members[k];
+    const type2tc &field_type =
+      elements ? to_array_type(type).subtype : st.members[k];
     if (!elements)
       member_index.emplace(st.member_names[k], k);
     const std::string id = id2string(s.id) + "::" + std::to_string(k);
@@ -429,9 +429,9 @@ void split_structst::add_fields(
       untracked_fields.insert(id);
     symbolt var = s;
     var.id = id;
-    var.name = elements ? id2string(s.name) + "[" + std::to_string(k) + "]"
-                        : id2string(s.name) + "." +
-                            id2string(st.member_pretty_names[k]);
+    var.name =
+      elements ? id2string(s.name) + "[" + std::to_string(k) + "]"
+               : id2string(s.name) + "." + id2string(st.member_pretty_names[k]);
     var.is_parameter = false;
     var.set_type(field_type);
     var.set_value(expr2tc());
