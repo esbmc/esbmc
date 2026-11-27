@@ -1,5 +1,5 @@
 CORE
 main.c
 --field-sensitive-ssa
-^Field-sensitive SSA splits 2 struct object\(s\)$
+^Field-sensitive SSA splits 5 struct object\(s\)$
 ^VERIFICATION SUCCESSFUL$

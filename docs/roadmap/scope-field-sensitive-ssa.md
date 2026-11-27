@@ -40,7 +40,8 @@ host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
 may start with that exception recorded.**
-> Phase 3, first part (nested structs; arrays of structs are not started, and
+> Phase 3, first part (nested structs; arrays of structs by constant index are
+> in draft PR from `feat/field-sensitive-ssa-phase3-arrays-of-structs`, §8.43, and
 > k-induction havoc already goes through member chains, §8.42): a struct member of a split object is split in turn,
 > up to 4096 leaves per object (§8.38). The gate is not met: see §8.38.
 > The corpus is in `regression/field-sensitivity/`
@@ -2585,3 +2586,35 @@ model; the build takes about 35 minutes on 4 cores).
 
 Not measured: everything else the Phase 3 gate lists, as in §8.41. The Phase 3
 gate stays unmet.
+
+### 8.43 Phase 3: arrays of structs by constant index (draft, gate not met)
+
+`feat/field-sensitive-ssa-phase3-arrays-of-structs` splits a fixed-size array
+of structs (at most 4096 elements) into one object per element, split in turn
+when the element struct is; an index that is not a constant inside the bounds
+keeps the array whole. Z3-only RelWithDebInfo build of this branch merged with
+master `8dae50c58` (no Bitwuzla in the sandbox). Each `test.desc` command was
+run with and without `--field-sensitive-ssa`, 30 s per run, verdict line
+compared:
+
+| Suite | Tests run | Verdict changes | Timeouts |
+|---|---|---|---|
+| `regression/esbmc` CORE | 3323 of 3864 | 0 | 8 |
+| `regression/esbmc-cpp/cpp` CORE | 1214 of 1482 | 0 | 12 |
+| `regression/k-induction` CORE | 275 of 316 | 0 | 2 |
+
+Tests that pass the flag, `--k-induction` (except in the k-induction row) or
+a Bitwuzla option themselves were skipped; trace text was not diffed. The 30
+`field-sensitivity/` corpus tests and the three `field_sensitive_ssa_array_*`
+tests pass under ctest. `field_sensitive_ssa_array_const` expected 2 split
+objects; it splits 5 (the array, its three elements and `b`), and the
+expectation is corrected.
+
+Constant-index array of `struct { int x, y; }`, two writes per element, Z3,
+one run each: n=8 0.13 s off, 0.12 s on; n=512 0.30 s, 0.23 s; n=2048 3.7 s,
+0.96 s.
+
+Unmet, not measured: Bitwuzla, the Python suite, the unreachability harnesses
+for the new branches (`constant_in_bounds`, `symbol_root`, the array arms of
+`split_leaves`, `whole` and `field_of`), the assert-enabled build, trace text
+diffs, and the SV-COMP run.
