@@ -1,4 +1,5 @@
 #include <goto-symex/trace/sarif.h>
+#include <optional>
 
 #include <ac_config.h>
 #include <charconv>
@@ -221,6 +222,12 @@ void append_dead_store_findings(
 
 // Wrap `run` in a SARIF 2.1.0 document and write it to `out_path` ("-" is
 // stdout). Shared serialisation so the schema URI lives in one place.
+// A multi-phase --multi-property run rewrites its document after every phase.
+// A file keeps the last one; stdout would print them all, so it is held here
+// and printed once by sarif_flush_stdout().
+static bool defer_stdout = false;
+static std::optional<std::string> deferred_stdout;
+
 void write_sarif_document(const std::string &out_path, json run)
 {
   json doc;
@@ -233,7 +240,10 @@ void write_sarif_document(const std::string &out_path, json run)
   const std::string serialised = doc.dump(2);
   if (out_path == "-")
   {
-    std::cout << serialised << "\n";
+    if (defer_stdout)
+      deferred_stdout = serialised;
+    else
+      std::cout << serialised << "\n";
     return;
   }
 
@@ -246,6 +256,19 @@ void write_sarif_document(const std::string &out_path, json run)
   out << serialised << "\n";
 }
 } // namespace
+
+void sarif_defer_stdout()
+{
+  defer_stdout = true;
+}
+
+void sarif_flush_stdout()
+{
+  if (deferred_stdout)
+    std::cout << *deferred_stdout << "\n";
+  deferred_stdout.reset();
+  defer_stdout = false;
+}
 
 void sarif_goto_trace(
   const optionst &options,
@@ -260,21 +283,36 @@ void sarif_goto_trace(
   // Collect violation steps and the rules / CWE ids they exercise. The
   // substring-to-rule mapping comes from util/cwe_mapping — single source of
   // truth shared with the textual / JSON / GraphML outputs.
-  std::vector<sarif_finding_t> findings;
-
+  std::vector<sarif_violationt> violations;
   for (const auto &step : goto_trace.steps)
-  {
-    if (step.type != symex_targett::ASSERT || step.guard)
-      continue;
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      violations.push_back(
+        {step.comment,
+         step.pc->location.get_file().as_string(),
+         parse_line(step.pc->location.get_line().as_string())});
+  sarif_violations(options, violations, advisories);
+}
 
-    const cwe_rule_t &rule = cwe_rule_for(step.comment);
+void sarif_violations(
+  const optionst &options,
+  const std::vector<sarif_violationt> &violations,
+  const std::vector<dead_store_advisoryt> &advisories)
+{
+  const std::string out_path = options.get_option("sarif-output");
+  if (out_path.empty())
+    return;
+
+  std::vector<sarif_finding_t> findings;
+  for (const sarif_violationt &v : violations)
+  {
+    const cwe_rule_t &rule = cwe_rule_for(v.comment);
     findings.push_back(
       {rule.sarif_id,
        rule.short_description,
        "error",
-       step.comment.empty() ? "Assertion check" : step.comment,
-       step.pc->location.get_file().as_string(),
-       parse_line(step.pc->location.get_line().as_string()),
+       v.comment.empty() ? "Assertion check" : v.comment,
+       v.file,
+       v.line,
        rule.cwes});
   }
 

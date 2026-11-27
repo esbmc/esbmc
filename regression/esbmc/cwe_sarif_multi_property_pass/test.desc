@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --sarif-output m.sarif
+^VERIFICATION SUCCESSFUL$
+CHECK_JSON m.sarif $.version == "2.1.0"
+CHECK_FILE m.sarif contains "results": \[\]

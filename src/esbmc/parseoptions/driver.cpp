@@ -549,6 +549,21 @@ int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  // Each phase of a --multi-property run rewrites the whole SARIF document;
+  // stdout gets only the final one.
+  struct sarif_stdout_once
+  {
+    explicit sarif_stdout_once(bool on)
+    {
+      if (on)
+        sarif_defer_stdout();
+    }
+    ~sarif_stdout_once()
+    {
+      sarif_flush_stdout();
+    }
+  } sarif_once(options.get_bool_option("multi-property"));
+
   const bool k_step =
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||

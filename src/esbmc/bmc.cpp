@@ -126,6 +126,34 @@ static std::mutex cov_report_mutex;
 // completeness verdict over a measurement that never happened.
 static std::atomic<bool> cov_block_reported{false};
 
+// Violations a --multi-property run has witnessed, for its one SARIF document.
+// Process-wide so a k-induction or incremental run keeps what an earlier phase
+// found. Keyed by location (with column, as one line can hold several claims)
+// and message, so further witnesses, interleavings or k steps of the same
+// claim add nothing, and in source order, so --parallel-solving writes the
+// same document every time. Only the reported fields are kept, not traces.
+using sarif_keyt = std::tuple<std::string, int, int, std::string>;
+static std::map<sarif_keyt, sarif_violationt> sarif_found;
+static std::mutex sarif_violations_mutex;
+
+static void note_sarif_violations(const goto_tracet &trace)
+{
+  std::lock_guard lock(sarif_violations_mutex);
+  for (const goto_trace_stept &step : trace.steps)
+    if (step.is_assert() && !step.guard)
+    {
+      const locationt &l = step.pc->location;
+      const int line = atoi(l.get_line().as_string().c_str());
+      sarif_found.try_emplace(
+        {l.get_file().as_string(),
+         line,
+         atoi(l.get_column().as_string().c_str()),
+         step.comment},
+        sarif_violationt{
+          step.comment, l.get_file().as_string(), unsigned(line)});
+    }
+}
+
 // Record why the coverage measurement is not exhaustive, so the reported
 // percentage can be qualified rather than silently understated.
 void note_cov_incomplete(const std::string &reason)
@@ -2539,6 +2567,22 @@ smt_resultt bmct::start_bmc()
   // held back until every interleaving has been explored
   if (!options.get_bool_option("multi-property"))
     report_trace(res, *eq);
+  // SARIF is one document per run, so the violations collected per claim are
+  // written here, once, together with the dead-store advisories. Every phase
+  // rewrites the accumulated set, so the last write is the whole run.
+  else if (
+    !dead_store_sarif_written && !options.get_option("sarif-output").empty() &&
+    res != P_SMTLIB && res != P_ERROR)
+  {
+    std::vector<sarif_violationt> violations;
+    {
+      std::lock_guard lock(sarif_violations_mutex);
+      for (const auto &[key, v] : sarif_found)
+        violations.push_back(v);
+    }
+    sarif_violations(options, violations, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 
   // A phase that died before its per-claim loop, or only emitted a formula,
   // skipped every property and never sets report_incomplete.
@@ -4076,6 +4120,9 @@ smt_resultt bmct::multi_property_check(
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
+      // A forward-condition model only says the loop runs past the bound.
+      const bool want_sarif =
+        !is_goto_cov && !fc && !options.get_option("sarif-output").empty();
 
       // A bare "{index}-" prefix collides across k-induction phases/k-steps,
       // since ce_counter restarts at zero on every bmct (discussion #6070);
@@ -4146,6 +4193,8 @@ smt_resultt bmct::multi_property_check(
           generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
           generate_json_report(witness_id, ns, w.trace);
+        if (want_sarif)
+          note_sarif_violations(w.trace);
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)

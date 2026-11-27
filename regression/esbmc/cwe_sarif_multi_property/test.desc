@@ -1,0 +1,10 @@
+CORE
+main.c
+--multi-property --sarif-output m.sarif
+^VERIFICATION FAILED$
+CHECK_JSON m.sarif $.version == "2.1.0"
+CHECK_JSON m.sarif $.runs[0].results[0].ruleId == "array-bounds-violated"
+CHECK_JSON m.sarif $.runs[0].results[0].locations[0].physicalLocation.region.startLine == 11
+CHECK_JSON m.sarif $.runs[0].results[1].ruleId == "division-by-zero"
+CHECK_JSON m.sarif $.runs[0].results[1].locations[0].physicalLocation.region.startLine == 13
+CHECK_FILE m.sarif absent (?s)("ruleId".*){3}

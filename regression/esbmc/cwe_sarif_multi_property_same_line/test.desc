@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --sarif-output m.sarif
+^VERIFICATION FAILED$
+CHECK_JSON m.sarif $.runs[0].results[0].locations[0].physicalLocation.region.startLine == 8
+CHECK_JSON m.sarif $.runs[0].results[1].locations[0].physicalLocation.region.startLine == 8

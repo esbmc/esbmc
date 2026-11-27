@@ -19,10 +19,30 @@
 //
 // `goto_trace` may be empty (e.g. on VERIFICATION SUCCESSFUL) so that a run
 // with only advisories still produces a document.
+// Hold documents written to stdout until sarif_flush_stdout(), which prints
+// the last one. Used by --multi-property runs that rewrite the document per
+// phase.
+void sarif_defer_stdout();
+void sarif_flush_stdout();
+
 void sarif_goto_trace(
   const optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const std::vector<dead_store_advisoryt> &advisories = {});
+
+// One violated claim, as SARIF reports it.
+struct sarif_violationt
+{
+  std::string comment;
+  std::string file;
+  unsigned line = 0; // 0 means "unknown"
+};
+
+// As sarif_goto_trace, for violations collected without their traces.
+void sarif_violations(
+  const optionst &options,
+  const std::vector<sarif_violationt> &violations,
   const std::vector<dead_store_advisoryt> &advisories = {});
 
 // One provably-dead statement/branch found by --dead-code-check.
