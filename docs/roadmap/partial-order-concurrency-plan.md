@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-26):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
+**Status (2026-11-27):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -8,8 +8,8 @@ condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
-A loop cut by `--no-unwinding-assertions` stops only its own thread and
-the threads that wait for it. A compound assignment to a narrow `_Atomic`
+A loop or recursion cut by `--no-unwinding-assertions` stops only its own
+thread and the threads that wait for it. A compound assignment to a narrow `_Atomic`
 object is recorded as a write. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
@@ -18,7 +18,7 @@ object is recorded as a write. The effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-26.
+**Last updated:** 2026-11-27.
 
 ## 1. Goal
 
@@ -222,8 +222,8 @@ disagreements:
   event before it (`partial_order_loop_bound*`). `--deadlock-check` keeps
   the assumption. Still open: a thread halted while it holds a mutex makes
   any later lock of that mutex unsatisfiable, which hides the other
-  threads' violations, and a recursion bound is still an assumption on the
-  whole equation.
+  threads' violations. A recursion past its bound now also records a HALT
+  and ends its thread's path (`partial_order_recursion_bound*`).
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
   is reported between a write inside an atomic section and a plain read in
   `main`.

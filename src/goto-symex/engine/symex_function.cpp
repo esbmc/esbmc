@@ -592,6 +592,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       else
         claim(gen_false_expr(), "recursion unwinding assertion");
     }
+    else if (halt_thread_at_bound(gen_true_expr()))
+      cur_state->guard.make_false();
     else
     {
       // Add an unwinding assumption.
