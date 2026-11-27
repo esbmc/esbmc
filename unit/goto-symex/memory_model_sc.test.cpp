@@ -85,12 +85,29 @@ bool mentions(const expr2tc &e, const expr2tc &sym)
   return found;
 }
 
+/// The model sizes clocks and the stop time to the event count; the
+/// valuations name them at 32 bits.
+const expr2tc *find_time(const expr2tc &e, const valuation &v)
+{
+  if (!is_symbol2t(e) || !is_unsignedbv_type(e))
+    return nullptr;
+  auto it = v.find(symbol2tc(get_uint32_type(), to_symbol2t(e).thename));
+  return it == v.end() ? nullptr : &it->second;
+}
+
 void substitute(expr2tc &e, const valuation &v)
 {
   auto it = v.find(e);
   if (it != v.end())
   {
     e = it->second;
+    return;
+  }
+  if (const expr2tc *t = find_time(e, v))
+  {
+    const BigInt &value = to_constant_int2t(*t).value;
+    REQUIRE(value < BigInt::power2(e->type->get_width()));
+    e = constant_int2tc(e->type, value);
     return;
   }
   e->Foreach_operand([&](expr2tc &op) { substitute(op, v); });
@@ -173,7 +190,7 @@ TEST_CASE("each event keeps its clock for the trace", "[po]")
   write_read_writet f;
   auto it = std::prev(f.eq.SSA_steps.end(), 3);
   for (unsigned event = 0; event < 3; ++event, ++it)
-    CHECK(it->cond == clock(event));
+    CHECK(to_symbol2t(it->cond).thename == to_symbol2t(clock(event)).thename);
 }
 
 TEST_CASE("an SC execution satisfies the constraints", "[po]")
@@ -341,10 +358,10 @@ TEST_CASE("a section left open lasts to its thread's end", "[po]")
   add_event(eq, 1, symex_targett::SHARED_WRITE, x(2));
   memory_model_sct().run(eq.SSA_steps);
 
-  valuation v = {{clock(0), tick(1)}, {clock(1), tick(3)}};
-  v[clock(2)] = tick(2);
+  valuation v = {{clock(0), tick(0)}, {clock(1), tick(2)}};
+  v[clock(2)] = tick(1);
   CHECK_FALSE(all_hold(eq, v));
-  v[clock(2)] = tick(4);
+  v[clock(2)] = tick(3);
   CHECK(all_hold(eq, v));
 }
 
@@ -819,6 +836,25 @@ TEST_CASE("an event off the path does not wait", "[po]")
   memory_model_sct(false, true).run(eq.SSA_steps);
 
   CHECK_FALSE(deadlocked(eq, timed({1, 2, 3}, 2)));
+}
+
+TEST_CASE("clocks fit every event and a stop time after them", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    add_event(eq, 0, symex_targett::LOCK, mutex("c:@m"));
+    add_event(eq, 0, symex_targett::UNLOCK, mutex("c:@m"));
+  }
+  memory_model_sct(false, true).run(eq.SSA_steps);
+
+  for (const auto &step : eq.SSA_steps)
+    if (step.is_event())
+      CHECK(step.cond->type == get_uint_type(3));
+  CHECK(all_hold(eq, timed({0, 1, 2, 3}, 4)));
+  CHECK_FALSE(deadlocked(eq, timed({0, 1, 2, 3}, 4)));
 }
 
 TEST_CASE("other claims hold until every thread ends", "[po]")

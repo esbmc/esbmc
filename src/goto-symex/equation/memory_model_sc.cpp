@@ -2,6 +2,8 @@
 #include <irep2/irep2_utils.h>
 #include <util/symtab/symbol.h>
 
+#include <algorithm>
+#include <bit>
 #include <set>
 #include <string>
 #include <vector>
@@ -86,14 +88,20 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
 
 void memory_model_sct::collect(symex_target_equationt::SSA_stepst &steps)
 {
+  size_t n_events = 0;
+  for (const auto &step : steps)
+    n_events += step.is_event() && !step.ignore;
+  // Wide enough for one clock value per event plus the deadlock check's stop
+  // time above all of them.
+  clock_type = get_uint_type(std::max<size_t>(1, std::bit_width(n_events)));
+
   for (auto &step : steps)
   {
     if (!step.is_event() || step.ignore)
       continue;
 
     const size_t id = events.size();
-    step.cond =
-      symbol2tc(get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(id));
+    step.cond = symbol2tc(clock_type, "__ESBMC_po_clock$" + std::to_string(id));
     events.push_back({&step, step.cond});
     per_thread[step.source.thread_nr].push_back(id);
 
@@ -496,7 +504,7 @@ expr2tc memory_model_sct::finished(unsigned thread) const
 expr2tc memory_model_sct::done(size_t id) const
 {
   return lessthan2tc(
-    events[id].clock, symbol2tc(get_uint32_type(), "__ESBMC_po_stop"));
+    events[id].clock, symbol2tc(clock_type, "__ESBMC_po_stop"));
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)

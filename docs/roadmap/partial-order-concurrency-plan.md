@@ -14,8 +14,8 @@ is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread.
-Bitwuzla runs `--partial-order` faster than Z3. The effort figures are
-estimates.
+Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
+event count needs. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -269,6 +269,15 @@ the `11_time_var_mutex` fix, and 4 false data races on an `atomic_uint`
 (`github_2149_pthread_{2,6}`, `github_3955_{2,5}`), which C11 5.1.2.4p25
 excludes. Fixed: the race check skips an object whose type is `_Atomic`
 (`partial_order_atomic_object_race*`).
+
+Clocks were 32-bit bitvectors. They now have the fewest bits that hold one
+value per event and a stop time above them all. With Z3 (one core,
+2026-11-27), the §2 counter with an atomic section takes 0.2, 0.2, 0.5 and
+3.7 s for 2 to 5 threads, against 3.3, 5.3, 17.3 and 47.2 s at 32 bits. The
+mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
+`esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
+total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
+narrow clocks under Bitwuzla, and integer clocks, are not measured yet.
 
 ## 5. Tests
 
