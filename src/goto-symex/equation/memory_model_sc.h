@@ -3,6 +3,7 @@
 #include <goto-symex/equation/ssa_step_algorithm.h>
 
 #include <map>
+#include <set>
 #include <vector>
 
 /// The sequentially consistent memory model of --partial-order (#10990).
@@ -25,7 +26,7 @@
 /// Each event keeps its clock in its cond, for the trace to order steps by.
 /// With \p races, a claim at the end of the equation for each pair of
 /// conflicting events of different threads states that no execution places
-/// them next to each other.
+/// them next to each other. Two events inside atomic sections never race.
 /// With \p deadlocks, the events whose clock is below a free stop time form a
 /// prefix of the execution, and only the locks in it need a release before
 /// them. A claim states that no prefix leaves main, and every other thread
@@ -64,6 +65,7 @@ private:
   std::map<irep_idt, std::vector<size_t>> reads, writes;
   std::vector<size_t> spawns, joins;
   std::map<irep_idt, std::vector<size_t>> locks, unlocks;
+  std::set<size_t> in_atomic;
   symex_target_equationt::SSA_stepst constraints, claims;
   const bool races;
   const bool deadlocks;
@@ -88,5 +90,6 @@ private:
   void halt_inside(size_t begin, size_t halt);
   void constrain(const expr2tc &cond, const eventt &about);
   expr2tc before(size_t a, size_t b) const;
+  bool is_atomic_bound(size_t id) const;
   bool same_thread(size_t a, size_t b) const;
 };
