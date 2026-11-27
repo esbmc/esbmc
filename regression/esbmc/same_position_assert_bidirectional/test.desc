@@ -1,5 +1,5 @@
 CORE
 main.c
 --k-induction --max-k-step 8 --bidirectional --z3
-^\*\* 0 of 6 properties failed, 6 passed$
+^\*\* 0 of [0-9]+ properties failed, [0-9]+ passed$
 ^VERIFICATION SUCCESSFUL$

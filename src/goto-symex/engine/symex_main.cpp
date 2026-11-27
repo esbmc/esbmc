@@ -126,26 +126,19 @@ void goto_symext::claim(
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
+  if (claim_is_induction_hypothesis())
+  {
+    assume(claim_expr);
+    return;
+  }
+
   symex_witness_assert(new_expr, msg, user_assertion);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
 
-  // Convert asserts in assumes, if it's not the last loop iteration
-  // This is a common technique in k-induction to strengthen the induction
-  // hypothesis. also, don't convert assertions added by the bidirectional
-  // search
-  if (
-    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
-  {
-    // Fetch the current loop iteration count
-    BigInt unwind = cur_state->loop_iterations[first_loop];
-    if (unwind < max_unwind - 1)
-    {
-      assume(claim_expr);
-      return;
-    }
-  }
+  if (claim_strengthens_inductive_step())
+    assume(claim_expr);
 }
 
 void goto_symext::record_property_verdict(

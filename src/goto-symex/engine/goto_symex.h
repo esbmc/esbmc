@@ -527,6 +527,19 @@ protected:
    */
   bool get_unwind(const symex_targett::sourcet &source, const BigInt &unwind);
 
+  /// The unwinding bound of \p loop: --unwindset, else the per-function
+  /// bound, else max_unwind. 0 means unbounded.
+  BigInt loop_unwind_bound(unsigned loop);
+
+  /// Whether the inductive step may assume, rather than assert, the claim at
+  /// the current pc. See inductive_claims.cpp.
+  bool claim_is_induction_hypothesis();
+  /// Whether the inductive step assumes the claim at the current pc after
+  /// asserting it.
+  bool claim_strengthens_inductive_step();
+  void setup_inductive_claims();
+  void record_base_case_cut(unsigned loop);
+
   /**
    *  Encode unwinding assertions and assumption.
    *  If unwinding assertions are on, assert that the unwinding bound is not
@@ -1951,6 +1964,18 @@ protected:
 
   /** Loop numbers. */
   unsigned first_loop;
+  /** Base case: loops cut at the unwinding bound, already recorded.
+   *  Inductive step: the loops the base case at the same k cut, read from
+   *  the option "kind-base-cut-loops"; nullopt when no base case at this k
+   *  ran. */
+  std::set<unsigned> cut_loops;
+  std::optional<std::set<unsigned>> base_case_cut_loops;
+  /** Per instruction, the outermost loop enclosing it in its function, keyed
+   *  by instruction address. Built for the inductive step only. */
+  std::shared_ptr<const std::unordered_map<const void *, unsigned>>
+    outermost_loop;
+  /** Outermost loops that run as one instance per execution. */
+  std::shared_ptr<const std::set<unsigned>> single_instance_loops;
   /** Number of assertions executed. */
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */

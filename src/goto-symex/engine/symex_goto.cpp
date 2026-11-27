@@ -858,6 +858,8 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
+  record_base_case_cut(cur_state->source.pc->loop_number);
+
   if (
     partial_loops && !config.options.get_bool_option("termination") &&
     !cur_state->source.pc->exits_at_bound)
@@ -911,12 +913,9 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   cur_state->guard.add(negated_cond);
 }
 
-bool goto_symext::get_unwind(
-  const symex_targett::sourcet &source,
-  const BigInt &unwind)
+BigInt goto_symext::loop_unwind_bound(unsigned id)
 {
-  unsigned id = source.pc->loop_number;
-  BigInt this_loop_max_unwind = max_unwind;
+  BigInt bound = max_unwind;
 
   // Check for function-specific unwind bound
   if (loop_id_to_func_index.count(id) != 0)
@@ -924,12 +923,21 @@ bool goto_symext::get_unwind(
     const auto &[func_name, loop_index] = loop_id_to_func_index[id];
     auto unwind_key = std::make_pair(func_name, loop_index);
     if (unwind_func_set.count(unwind_key) != 0)
-      this_loop_max_unwind = unwind_func_set[unwind_key];
+      bound = unwind_func_set[unwind_key];
   }
 
   // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
-    this_loop_max_unwind = unwind_set[id];
+    bound = unwind_set[id];
+
+  return bound;
+}
+
+bool goto_symext::get_unwind(
+  const symex_targett::sourcet &source,
+  const BigInt &unwind)
+{
+  const BigInt this_loop_max_unwind = loop_unwind_bound(source.pc->loop_number);
 
   bool stop_unwind =
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;

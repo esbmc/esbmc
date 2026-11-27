@@ -307,6 +307,8 @@ goto_symext::goto_symext(
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
+
+  setup_inductive_claims();
 }
 
 goto_symext::goto_symext(const goto_symext &sym)
@@ -348,6 +350,10 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;
   first_loop = sym.first_loop;
+  cut_loops = sym.cut_loops;
+  base_case_cut_loops = sym.base_case_cut_loops;
+  outermost_loop = sym.outermost_loop;
+  single_instance_loops = sym.single_instance_loops;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;

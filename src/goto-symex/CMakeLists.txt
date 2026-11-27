@@ -1,5 +1,6 @@
 add_library(symex
   engine/symex_main.cpp
+  engine/inductive_claims.cpp
   engine/symex_assign.cpp
   engine/symex_goto.cpp
   engine/symex_function.cpp
