@@ -540,6 +540,9 @@ int esbmc_parseoptionst::do_partial_order(
         options.get_bool_option("data-races-check"),
         options.get_bool_option("deadlock-check")))
     return 1;
+  // Symex runs threads one after another, so the online interval domain
+  // would hand one thread's writes to the next thread's loop guards.
+  options.set_option("no-interval-symex-guard", true);
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
