@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary --multi-property
+^  PASSED +\[main\.null-pointer-dereference\.1\]
+^  FAILED +\[main\.heap-array-bounds-violated\.1\]
+^VERIFICATION FAILED$
