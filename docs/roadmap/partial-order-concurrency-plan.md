@@ -13,7 +13,8 @@ thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write. A failed assumption, `abort()` included, stops only its own thread.
-Bitwuzla runs `--partial-order` faster than Z3. The effort figures are
+Bitwuzla runs `--partial-order` faster than Z3. `--incremental-bmc` and
+`--falsification` raise its unwinding bound. The effort figures are
 estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
@@ -267,6 +268,15 @@ solvers give the same 11 disagreements: the 7 above that remained before
 the `11_time_var_mutex` fix, and 4 false data races on an `atomic_uint`
 (`github_2149_pthread_{2,6}`, `github_3955_{2,5}`), which C11 5.1.2.4p25
 excludes.
+
+`--partial-order` runs under `--incremental-bmc` and `--falsification`: each
+bound is one `--partial-order` run, and the forward condition proves the
+program once no thread's loop passes the bound (`partial_order_incremental_bmc*`,
+`partial_order_falsification_fail`). These strategies do not propagate
+arrays, so a join on `id[j]` reads the ids' array in its event's guard; the
+slicer now counts that read, where it had dropped the stores to the array
+(`partial_order_incremental_join*`). `--k-induction` is still rejected; the
+SV-COMP wrapper's concurrency path is the next step towards a benchexec run.
 
 ## 5. Tests
 

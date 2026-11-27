@@ -187,8 +187,8 @@ static bool schedule_conflicts(const cmdlinet &cmdline)
 }
 
 /// --partial-order runs each thread once and lets the solver order the shared
-/// accesses (#10990), so the interleaving explorers, the unwinding strategies
-/// and the checks that need a scheduler are out of its scope.
+/// accesses (#10990), so the interleaving explorers, the strategies with an
+/// inductive step and the checks that need a scheduler are out of its scope.
 static bool partial_order_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("partial-order"))
@@ -200,8 +200,6 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
         "state-hashing",
         "k-induction",
         "k-induction-parallel",
-        "incremental-bmc",
-        "falsification",
         "termination",
         "data-races-check-only",
         "lock-order-check",
@@ -539,6 +537,10 @@ int esbmc_parseoptionst::do_partial_order(
         options.get_bool_option("data-races-check"),
         options.get_bool_option("deadlock-check")))
     return 1;
+  if (
+    options.get_bool_option("incremental-bmc") ||
+    options.get_bool_option("falsification"))
+    return do_bmc_strategy(options, goto_functions);
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
