@@ -108,7 +108,10 @@ class scope_checkt
 {
 public:
   scope_checkt(const namespacet &ns, bool verifying, bool races, bool deadlocks)
-    : ns(ns), verifying(verifying), races(races), deadlocks(deadlocks)
+    : ns(ns),
+      rejects_assumptions(verifying && deadlocks),
+      races(races),
+      deadlocks(deadlocks)
   {
   }
 
@@ -131,7 +134,7 @@ public:
 
 private:
   const namespacet &ns;
-  const bool verifying;
+  const bool rejects_assumptions;
   const bool races;
   const bool deadlocks;
   const locationt *where = nullptr;
@@ -160,7 +163,7 @@ private:
   {
     if (instruction.is_function_call())
       return check_call(to_code_function_call2t(instruction.code));
-    if (verifying && deadlocks && instruction.is_assume())
+    if (rejects_assumptions && instruction.is_assume())
       return reject("an assumption under --deadlock-check");
     return check_expr(instruction.code) && check_expr(instruction.guard);
   }
@@ -172,7 +175,7 @@ private:
       return reject("a call through a function pointer");
     if (is_unsupported_call(name))
       return reject("a call to " + name);
-    if (verifying && deadlocks && name == "__VERIFIER_assume")
+    if (rejects_assumptions && name == "__VERIFIER_assume")
       return reject("a call to " + name + " under --deadlock-check");
     if (!check_deadlock_call(name))
       return false;
