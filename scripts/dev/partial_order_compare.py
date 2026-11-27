@@ -4,13 +4,14 @@ Compare --partial-order with the default exploration on regression tests
 (#10990, phase 4).
 
 Each test runs twice, with its test.desc arguments as written and with
---partial-order appended. Only tests whose sources include <pthread.h> run,
-and the partial_order_* tests are skipped, since they pin --partial-order
-already.
+--partial-order appended; --extra-args, such as "--bitwuzla", is appended to
+both. Only tests whose sources include <pthread.h> run, and the
+partial_order_* tests are skipped, since they pin --partial-order already.
 
 Usage:
     partial_order_compare.py [--esbmc PATH] [--timeout S] [--jobs N]
-                             [--csv FILE] SUITE_DIR [SUITE_DIR ...]
+                             [--csv FILE] [--extra-args ARGS]
+                             SUITE_DIR [SUITE_DIR ...]
 
 Each run is classified as SUCCESSFUL, FAILED, UNKNOWN, REJECTED (the scope
 check or a flag conflict refused the input), TIMEOUT or ERROR. The summary
@@ -35,7 +36,8 @@ VERDICTS = (
     ("VERIFICATION UNKNOWN", "UNKNOWN"),
 )
 REJECTION = re.compile(r"--partial-order (?:does not support (.*?) yet"
-                       r"|cannot be combined with (--\S+))")
+                       r"|cannot be combined with (--\S+))"
+                       r"|(--\S+) cannot be combined with --partial-order")
 
 
 def parse_desc(path):
@@ -67,7 +69,7 @@ def classify(returncode, output):
             return verdict, ""
     match = REJECTION.search(output)
     if match:
-        return "REJECTED", match.group(1) or match.group(2)
+        return "REJECTED", next(g for g in match.groups() if g)
     return "ERROR", f"exit {returncode}"
 
 
@@ -90,8 +92,9 @@ def run(esbmc, test_dir, src, args, timeout):
 
 
 def compare(job):
-    esbmc, test_dir, timeout = job
+    esbmc, test_dir, timeout, extra = job
     level, src, args, expected = parse_desc(os.path.join(test_dir, "test.desc"))
+    args += extra
     default = run(esbmc, test_dir, src, args, timeout)
     partial = run(esbmc, test_dir, src, args + " --partial-order", timeout)
     return test_dir, level, expected, default, partial
@@ -155,11 +158,13 @@ def main():
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     parser.add_argument("--csv")
+    parser.add_argument("--extra-args", default="")
     parser.add_argument("suites", nargs="+")
     opts = parser.parse_args()
 
     esbmc = os.path.abspath(opts.esbmc) if os.sep in opts.esbmc else opts.esbmc
-    jobs = [(esbmc, t, opts.timeout) for t in collect(opts.suites)]
+    extra = " " + opts.extra_args if opts.extra_args else ""
+    jobs = [(esbmc, t, opts.timeout, extra) for t in collect(opts.suites)]
     with mp.Pool(opts.jobs) as pool:
         results = sorted(pool.imap_unordered(compare, jobs))
 
