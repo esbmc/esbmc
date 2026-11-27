@@ -820,6 +820,35 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
   return res;
 }
 
+void goto_convertt::check_vla_pointee_bounds(
+  const typet &ptr_type,
+  const locationt &loc,
+  goto_programt &dest)
+{
+  if (!ptr_type.is_pointer() || options.get_bool_option("no-vla-size-check"))
+    return;
+
+  const typet *t = &ptr_type;
+  while (t->is_pointer())
+    t = &t->subtype();
+
+  // C11 6.7.6.2p5: a VLA bound must evaluate to a value greater than zero
+  while (t->is_array())
+  {
+    const exprt &size = to_array_type(*t).size();
+    if (size.is_symbol())
+    {
+      expr2tc dim;
+      migrate_expr(size, dim);
+      goto_programt::targett tgt = dest.add_instruction(ASSERT);
+      tgt->guard = greaterthan2tc(dim, gen_zero(dim->type));
+      tgt->location = loc;
+      tgt->location.comment("VLA array dimension must be greater than zero");
+    }
+    t = &t->subtype();
+  }
+}
+
 void goto_convertt::generate_dynamic_size_vla(
   exprt &var,
   const locationt &loc,
@@ -1339,6 +1368,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   if (is_vla)
     generate_dynamic_size_vla(
       var, new_code.location(), dest, s->mode == "Python");
+
+  check_vla_pointee_bounds(var.type(), new_code.location(), dest);
 
   if (!initializer.is_nil())
     convert_decl_initializer(var, initializer, new_code, *s, dest);

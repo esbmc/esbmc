@@ -351,9 +351,9 @@ void smt_solver_baset::note_assignment(const expr2tc &lhs, const expr2tc &rhs)
   while (is_with2t(stored))
   {
     const with2t &with = to_with2t(stored);
-    at = is_array_type(with.type)
+    at = is_array_or_vector_type(with.type)
            ? expr2tc(index2tc(
-               to_array_type(with.type).subtype, at, with.update_field))
+               array_or_vector_subtype(with.type), at, with.update_field))
            : expr2tc(member2tc(
                with.update_value->type,
                at,

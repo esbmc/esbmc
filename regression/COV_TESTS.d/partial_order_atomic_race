@@ -1,0 +1,2 @@
+regression/esbmc-unix/partial_order_atomic_race
+regression/esbmc-unix/partial_order_atomic_race_fail

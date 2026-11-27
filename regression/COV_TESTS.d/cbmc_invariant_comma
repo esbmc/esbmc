@@ -1,0 +1,3 @@
+regression/goto-transcoder/cbmc_invariant_comma
+regression/goto-transcoder/cbmc_invariant_comma_fail
+regression/goto-transcoder/cbmc_invariant_va_start

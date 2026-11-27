@@ -638,6 +638,12 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Claim, assume or halt at a call to \p identifier past its recursion
+   *  bound. */
+  void recursion_bound(
+    const goto_functiont &goto_function,
+    const irep_idt &identifier);
+
   /** Convert an actual argument to its parameter's type, claiming the call
    *  undefined when the two are incompatible. */
   expr2tc argument_value(
@@ -832,8 +838,10 @@ protected:
    *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
    *  path: bound the copy by the objects' own widths, guard each byte position
    *  with i < n, and claim n <= that bound so an over-long copy is still
-   *  reported. Returns false when the operands cannot be resolved, leaving the
-   *  caller to bump. */
+   *  reported. A source at a symbolic offset is read through the offset; a
+   *  byte-array destination at a symbolic offset gets one store per byte.
+   *  Returns false when the operands cannot be resolved, leaving the caller
+   *  to bump. */
   bool memcpy_symbolic_length(
     const expr2tc &dst_arg,
     const expr2tc &src_arg,
@@ -859,6 +867,16 @@ protected:
    *  not a code object; nothing under --no-pointer-check. */
   void claim_not_code(const expr2tc &guard);
 
+  /** Resolve @p ptr to a single fixed-size scalar or array object, giving
+   *  the renamed, simplified byte @p offset into it (constant or not) and the
+   *  object's byte @p size. Returns false on any miss. */
+  bool resolve_byte_object(
+    const expr2tc &ptr,
+    expr2tc &object,
+    expr2tc &offset,
+    uint64_t &size,
+    bool rename_object = true);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
@@ -868,8 +886,7 @@ protected:
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
-    uint64_t &avail_bytes,
-    bool rename_object = true);
+    uint64_t &avail_bytes);
 
   /** Claims @p ptr is not NULL unless @p n is zero. */
   void claim_nonnull_operand(
@@ -1849,9 +1866,10 @@ protected:
   {
   }
 
-  /** Stop only the current thread where \p cont, the condition to run one
-   *  more iteration past the unwinding bound, holds. Returns false when the
-   *  bound must be an assumption on the whole equation instead. */
+  /** Stop only the current thread where \p cond holds: a loop or recursion
+   *  needs one more iteration or call past its bound, or an assumption fails.
+   *  Returns false when this must be an assumption on the whole equation
+   *  instead. */
   virtual bool halt_thread_at_bound(const expr2tc &)
   {
     return false;

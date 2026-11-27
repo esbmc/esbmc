@@ -402,11 +402,11 @@ public:
 
   void guard_by_interleaving(expr2tc &expr) const override;
 
-  /** --partial-order: a loop past its bound ends the thread with a HALT
-   *  event, since the other threads, which come later in the equation, may
-   *  run before it. --deadlock-check keeps the assumption, as its claim
-   *  counts a halted thread as finished. */
-  bool halt_thread_at_bound(const expr2tc &cont) override;
+  /** --partial-order: a loop or recursion past its bound, or a failed
+   *  assumption, ends the thread with a HALT event, since the other threads,
+   *  which come later in the equation, may run before it. --deadlock-check
+   *  keeps the assumption, as its claim counts a halted thread as finished. */
+  bool halt_thread_at_bound(const expr2tc &cond) override;
 
   /**
    *  True iff every thread in this schedule has reached a terminal state,
@@ -525,6 +525,11 @@ public:
    *  pthread_cond_wait by an UNLOCK and a LOCK of its mutex.
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_mutex(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: a lock may wait forever, as on a mutex its holder
+   *  never releases. The thread then halts before the lock, and the other
+   *  threads run on, so their earlier violations stay reachable. */
+  void wait_forever_at_lock();
 
   /** --partial-order: end the path at a pthread_exit call, or at a call to
    *  __ESBMC_terminate_thread in user code. The operational model ends it
@@ -840,6 +845,8 @@ protected:
   /** --partial-order: run each thread to completion and record its shared
    *  accesses as events instead of offering context switches. */
   bool partial_order;
+  /** --partial-order: how many locks have a choice to wait forever. */
+  unsigned lock_waits = 0;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's
