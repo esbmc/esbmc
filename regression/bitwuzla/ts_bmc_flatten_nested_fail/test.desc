@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-bmc --ts-no-fallback --max-k-step 10
+^Flattened main into one loop over 2 cut points$
+^VERIFICATION FAILED$
