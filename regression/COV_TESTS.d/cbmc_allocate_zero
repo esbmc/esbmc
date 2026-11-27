@@ -1,0 +1,11 @@
+regression/goto-transcoder/cbmc_allocate_nonconst_flag
+regression/goto-transcoder/cbmc_allocate_nozero_fail
+regression/goto-transcoder/cbmc_allocate_wide_flag
+regression/goto-transcoder/cbmc_allocate_zero
+regression/goto-transcoder/cbmc_allocate_zero_bool
+regression/goto-transcoder/cbmc_allocate_zero_bool_fail
+regression/goto-transcoder/cbmc_allocate_zero_fail
+regression/goto-transcoder/cbmc_allocate_zero_literal
+regression/goto-transcoder/cbmc_allocate_zero_literal_fail
+regression/goto-transcoder/cbmc_calloc_library
+regression/goto-transcoder/cbmc_calloc_library_fail

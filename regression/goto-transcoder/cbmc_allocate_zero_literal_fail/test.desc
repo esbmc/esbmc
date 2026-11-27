@@ -1,0 +1,4 @@
+CORE
+cbmc_allocate_zero_literal_fail.goto
+--binary --function main --force-malloc-success
+^VERIFICATION FAILED$
