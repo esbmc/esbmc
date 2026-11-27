@@ -2447,6 +2447,10 @@ regression/esbmc-unix/partial_order_atomic_rmw_fail
 regression/esbmc-unix/partial_order_atomic_rmw_lvalue
 regression/esbmc-unix/partial_order_atomic_rmw_lvalue_fail
 regression/esbmc-unix/partial_order_events_halt
+regression/esbmc-unix/partial_order_lock_held_at_bound
+regression/esbmc-unix/partial_order_lock_held_at_bound_fail
+regression/esbmc-unix/partial_order_lock_never_released
+regression/esbmc-unix/partial_order_lock_never_released_fail
 regression/esbmc-unix/partial_order_loop_bound
 regression/esbmc-unix/partial_order_loop_bound_atomic
 regression/esbmc-unix/partial_order_loop_bound_atomic_fail

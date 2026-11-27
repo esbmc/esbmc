@@ -56,6 +56,7 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   joins.clear();
   locks.clear();
   unlocks.clear();
+  in_atomic.clear();
   constraints.clear();
   claims.clear();
 
@@ -284,6 +285,8 @@ void memory_model_sct::atomic_sections()
         isolate(begin, id);
       else if (type == symex_targett::HALT && depth > 0)
         halt_inside(begin, id);
+      else if (depth > 0)
+        in_atomic.insert(id);
     }
     // A section still open when its thread ends lasts to the thread's end.
     if (depth > 0)
@@ -358,6 +361,7 @@ void memory_model_sct::data_races()
       for (size_t other : accesses)
         if (
           !same_thread(w, other) &&
+          !(in_atomic.count(w) && in_atomic.count(other)) &&
           (w < other ||
            events[other].step->type != symex_targett::SHARED_WRITE))
           claim_no_race(w, other);
@@ -365,12 +369,14 @@ void memory_model_sct::data_races()
 }
 
 /// A race is a pair of conflicting events with no event between them in some
-/// execution: the schedule can then run either one first.
+/// execution: the schedule can then run either one first. An atomic section's
+/// bounds access no memory, so they do not separate a plain access from one
+/// inside the section (#2386).
 void memory_model_sct::claim_no_race(size_t a, size_t b)
 {
   std::vector<expr2tc> adjacent{or2tc(before(a, b), before(b, a))};
   for (size_t c = 0; c < events.size(); ++c)
-    if (c != a && c != b)
+    if (c != a && c != b && !is_atomic_bound(c))
       adjacent.push_back(implies2tc(
         events[c].step->guard,
         not2tc(or2tc(
@@ -504,6 +510,13 @@ void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)
 expr2tc memory_model_sct::before(size_t a, size_t b) const
 {
   return lessthan2tc(events[a].clock, events[b].clock);
+}
+
+bool memory_model_sct::is_atomic_bound(size_t id) const
+{
+  const symex_targett::step_typet type = events[id].step->type;
+  return type == symex_targett::ATOMIC_BEGIN ||
+         type == symex_targett::ATOMIC_END;
 }
 
 bool memory_model_sct::same_thread(size_t a, size_t b) const

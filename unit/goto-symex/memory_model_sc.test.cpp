@@ -632,6 +632,42 @@ TEST_CASE("an access off the path does not race", "[po]")
     races_under(*claims[0], {{clock(0), tick(1)}, {clock(1), tick(2)}}));
 }
 
+TEST_CASE("an atomic write races with a plain read", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::ATOMIC_BEGIN, expr2tc());
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 0, symex_targett::ATOMIC_END, expr2tc());
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  memory_model_sct(true).run(eq.SSA_steps);
+
+  const auto claims = race_claims(eq);
+  REQUIRE(claims.size() == 1);
+  CHECK(races_under(
+    *claims[0],
+    {{clock(0), tick(1)},
+     {clock(1), tick(2)},
+     {clock(2), tick(3)},
+     {clock(3), tick(4)}}));
+}
+
+TEST_CASE("accesses inside atomic sections do not race", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::ATOMIC_BEGIN, expr2tc());
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 0, symex_targett::ATOMIC_END, expr2tc());
+  add_event(eq, 1, symex_targett::ATOMIC_BEGIN, expr2tc());
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  add_event(eq, 1, symex_targett::ATOMIC_END, expr2tc());
+  memory_model_sct(true).run(eq.SSA_steps);
+  CHECK(race_claims(eq).empty());
+}
+
 namespace
 {
 expr2tc mutex(const char *name)
