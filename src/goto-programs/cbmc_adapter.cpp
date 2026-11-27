@@ -215,6 +215,15 @@ bool constant_flag(const irept &flag, bool &value)
   return true;
 }
 
+// A NULL-valued pointer constant migrates to the null symbol (migrate.cpp).
+irept mk_null_ptr(const irept &ptr_type)
+{
+  irept c("constant");
+  c.add("type") = ptr_type;
+  c.add("value") = mk("NULL");
+  return c;
+}
+
 // Hex of the `width`-bit mask that sets the low k bits of every 2k-bit block,
 // built digit by digit so a width above 64 keeps its upper bits.
 static std::string swar_mask_hex(std::size_t width, std::size_t k)
@@ -359,24 +368,29 @@ void fix_expression(irept &irep)
     // Fall through: the operand-wrap step normalises the new typecast/constant.
   }
 
-  if (irep.id() == "is_dynamic_object")
+  // A bare id irep can be a name: CBMC's contracts library has a local
+  // variable called is_dynamic_object.
+  if (irep.id() == "is_dynamic_object" && irep.get_sub().size() == 1)
   {
-    // __CPROVER_DYNAMIC_OBJECT(p) -- true iff p points into a heap-allocated
-    // object -- lowers to an is_dynamic_object expr that migrate_expr has no
-    // handler for (it abort()s with "migrate expr failed"). ESBMC tracks the
-    // same fact in its symex-managed `c:@__ESBMC_is_dynamic` bool array
-    // (indexed by pointer object, set on malloc -- symex_assign.cpp), so the
-    // faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]`. That needs
-    // the array force-linked even when the binary never calls malloc (it is
-    // otherwise absent) and its `__ESBMC_inf_size` shape preserved, so it is
-    // left as future work. Only an explicit __CPROVER_DYNAMIC_OBJECT reaches
-    // here -- CBMC's free()/dynamic checks live in library bodies it re-links
-    // at analysis time, not in the serialised binary -- so decline cleanly (a
-    // throw the create_goto_program handler turns into a graceful error exit,
-    // roadmap §4.7) rather than abort()-ing.
-    throw std::string(
-      "CBMC adapter: __CPROVER_DYNAMIC_OBJECT (is_dynamic_object) is not yet "
-      "supported on the --binary path");
+    // The body of __CPROVER_DYNAMIC_OBJECT in builtin_libs.c. The p != NULL
+    // test is needed: a malloc that returns NULL marks object 0 dynamic.
+    const irept ptr = irep.get_sub()[0];
+    const typet bool_ty = bool_type();
+
+    irept is_dynamic("symbol");
+    is_dynamic.add("type") =
+      array_typet(bool_ty, exprt("infinity", size_type()));
+    is_dynamic.set("identifier", "c:@__ESBMC_is_dynamic");
+
+    irep = mk_binary(
+      "and",
+      bool_ty,
+      mk_binary("notequal", bool_ty, ptr, mk_null_ptr(ptr.find("type"))),
+      mk_binary(
+        "index",
+        bool_ty,
+        is_dynamic,
+        mk_unary("pointer_object", pointer_type(), ptr)));
   }
 
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
@@ -1496,16 +1510,10 @@ irept build_realloc_rhs(const irept &lhs, const irept::subt &args)
   realloc_branch.get_sub().push_back(ptr);
   realloc_branch.add("#size") = size_arg;
 
-  // is_null = (ptr == NULL); a NULL-valued pointer constant migrates to the
-  // null symbol (migrate.cpp).
-  irept null_const(irep_idt("constant"));
-  null_const.add("type") = ptr.find("type");
-  null_const.add("value") = mk("NULL");
-
   irept is_null(irep_idt("="));
   is_null.add("type") = static_cast<const irept &>(bool_type());
   is_null.get_sub().push_back(ptr);
-  is_null.get_sub().push_back(null_const);
+  is_null.get_sub().push_back(mk_null_ptr(ptr.find("type")));
 
   irept if_expr(irep_idt("if"));
   if_expr.add("type") = lhs.find("type");
