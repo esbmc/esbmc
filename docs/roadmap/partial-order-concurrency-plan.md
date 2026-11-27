@@ -12,7 +12,8 @@ A loop or recursion cut by `--no-unwinding-assertions` stops only its own
 thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
-write. The effort figures are estimates.
+write. A failed assumption, `abort()` included, stops only its own thread.
+The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -239,7 +240,11 @@ disagreements:
   write. Fixed: writes, element updates and dereference updates see through
   the cast (`partial_order_atomic_rmw*`).
   `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
-  section probably does not cut the thread's later events.
+  section did not keep a later thread out, since an assumption only
+  constrained the claims after it in the equation. Fixed: a failed
+  assumption halts its thread, as a loop bound does, and assumptions are
+  accepted except under `--deadlock-check` (`partial_order_abort*`,
+  `partial_order_assume_*`); the task now takes 100 s.
 - Different semantics. In the four `github_6831_{stats,sleep_sets}*` tests
   the default runs `x++` as one step, so a lost update is not reachable;
   `--partial-order` reads and writes separately and finds it.
