@@ -402,10 +402,10 @@ public:
 
   void guard_by_interleaving(expr2tc &expr) const override;
 
-  /** --partial-order: a loop past its bound, or a failed assumption, ends
-   *  the thread with a HALT event, since the other threads, which come later
-   *  in the equation, may run before it. --deadlock-check keeps the
-   *  assumption, as its claim counts a halted thread as finished. */
+  /** --partial-order: a loop or recursion past its bound, or a failed
+   *  assumption, ends the thread with a HALT event, since the other threads,
+   *  which come later in the equation, may run before it. --deadlock-check
+   *  keeps the assumption, as its claim counts a halted thread as finished. */
   bool halt_thread_at_bound(const expr2tc &cond) override;
 
   /**

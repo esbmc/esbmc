@@ -8,12 +8,12 @@ condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
-A loop cut by `--no-unwinding-assertions` stops only its own thread and
-the threads that wait for it, and so does a lock on a mutex that is never
-released. An access inside an atomic section races with a plain one. A
-compound assignment to a narrow `_Atomic` object is recorded as a write. A
-failed assumption, `abort()` included, stops only its own thread. The effort
-figures are estimates.
+A loop or recursion cut by `--no-unwinding-assertions` stops only its own
+thread and the threads that wait for it, and so does a lock on a mutex that
+is never released. An access inside an atomic section races with a plain
+one. A compound assignment to a narrow `_Atomic` object is recorded as a
+write. A failed assumption, `abort()` included, stops only its own thread.
+The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -226,8 +226,8 @@ disagreements:
   the assumption. A lock may also wait forever: the thread halts before it,
   so a mutex that is never released, because its holder stopped at a bound
   or ended, no longer hides the other threads' earlier violations
-  (`partial_order_lock_*`). Still open: a recursion bound is still an
-  assumption on the whole equation.
+  (`partial_order_lock_*`). A recursion past its bound now also records a
+  HALT and ends its thread's path (`partial_order_recursion_bound*`).
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
   was reported between a write inside an atomic section and a plain read in
   `main`. Fixed: a section's bounds no longer separate a race, and two
