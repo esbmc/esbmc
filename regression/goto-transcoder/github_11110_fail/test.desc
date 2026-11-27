@@ -1,0 +1,4 @@
+CORE
+github_11110_fail.goto
+--binary --force-malloc-success
+^VERIFICATION FAILED$
