@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --force-malloc-success
+^VERIFICATION FAILED$
+both locals kept

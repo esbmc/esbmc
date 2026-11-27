@@ -734,8 +734,10 @@ protected:
   void intrinsic_terminate_thread(reachability_treet &art);
   /** Perform havoc_object; assign nondet to every object the argument may
    *  point to, whole and of any size. k-induction emits it at a loop head for
-   *  a pointer the loop writes through at offsets it cannot bound. */
-  void intrinsic_havoc_object(const code_function_call2t &call);
+   *  a pointer the loop writes through at offsets it cannot bound. Unless
+   *  @p checked, claim nothing about the objects, as CBMC's havoc_object. */
+  void
+  intrinsic_havoc_object(const code_function_call2t &call, bool checked = true);
   /** Perform init_thread_local; seeds each `__thread`-qualified global
    *  to its static initializer in the active thread's renaming scope. */
   void intrinsic_init_thread_local(reachability_treet &art);

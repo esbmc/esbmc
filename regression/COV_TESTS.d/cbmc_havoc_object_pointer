@@ -1,0 +1,5 @@
+regression/goto-transcoder/cbmc_havoc_object_heap
+regression/goto-transcoder/cbmc_havoc_object_pointer
+regression/goto-transcoder/cbmc_havoc_object_pointer_fail
+regression/goto-transcoder/cbmc_havoc_object_loop_contract
+regression/goto-transcoder/cbmc_havoc_object_loop_contract_fail

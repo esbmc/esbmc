@@ -1073,6 +1073,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_havoc_object_unchecked")
+  {
+    intrinsic_havoc_object(func_call, false);
+    return;
+  }
+
   if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
