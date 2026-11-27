@@ -10,17 +10,17 @@ them too. For verification in CI rather than at the keyboard, see
 [GitHub Action](/docs/github-action).
 
 {{< cards >}}
-{{< card link="https://github.com/esbmc/vscode-esbmc" title="VS Code Extension" icon="external-link" >}}
+{{< card link="https://open-vsx.org/extension/esbmc/vscode-esbmc" title="VS Code Extension" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/agent-marketplace" title="Claude Code Plugin" icon="external-link" >}}
 {{< /cards >}}
 
 ## Visual Studio Code
 
-[vscode-esbmc](https://github.com/esbmc/vscode-esbmc) verifies the file you are
-editing without leaving the editor, for C, C++, Python and Solidity files. It
-places each violated property on its line in the Problems panel (read from
-ESBMC's SARIF report), shows the verdict in the status bar and the
+[vscode-esbmc](https://open-vsx.org/extension/esbmc/vscode-esbmc) verifies the
+file you are editing without leaving the editor, for C, C++, Python and Solidity
+files. It places each violated property on its line in the Problems panel (read
+from ESBMC's SARIF report), shows the verdict in the status bar and the
 counterexample steps in an **ESBMC Counterexample** view, and keeps ESBMC's full
 output in an output channel. A CodeLens above each function verifies that
 function alone. Its command-palette entries are:
@@ -41,10 +41,12 @@ Note that it requires VS Code 1.68 or later. The extension also ships an MCP
 server with a `verify` tool, so AI coding agents can run ESBMC through it; the
 repository README shows the configuration.
 
-The extension is not on the VS Code Marketplace yet, so build the `.vsix` from
-source and install it from the Extensions view; the repository README has the
-walkthrough. Sideloading this way does not pull in the extension's dependency
-on `mindaro-dev.file-downloader`, which the install and update commands need.
+Install it from [Open VSX](https://open-vsx.org/extension/esbmc/vscode-esbmc),
+which VS Codium and other VS Code derivatives use. It is not on the VS Code
+Marketplace yet; on VS Code itself, build the `.vsix` from source and install it
+from the Extensions view — the repository README has the walkthrough. Sideloading
+that way does not pull in the extension's dependency on
+`mindaro-dev.file-downloader`, which the install and update commands need.
 
 ## Web interface
 
