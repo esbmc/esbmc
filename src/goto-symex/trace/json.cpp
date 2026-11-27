@@ -7,6 +7,7 @@
 #include <charconv>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <regex>
 
 using json = nlohmann::json;
@@ -438,7 +439,10 @@ void add_coverage_to_json(const goto_tracet &goto_trace, const namespacet &ns)
     test_entry["coverage"]["files"][file] = file_coverage;
   }
 
-  // Read existing JSON and append new test
+  // Read existing JSON and append new test. --parallel-solving reports
+  // claims from several threads, so the read-modify-write must not interleave.
+  static std::mutex report_mutex;
+  std::lock_guard lock(report_mutex);
   json all_tests = []() {
     // TODO: Allow diff filename for report
     std::ifstream input("report.json");

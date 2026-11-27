@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --parallel-solving --parallel-solving-threads 4 --generate-json-report
+^VERIFICATION FAILED$
+CHECK_JSON report.json $[19].status == "violation"
+CHECK_FILE report.json absent (?s)("status".*){21}
