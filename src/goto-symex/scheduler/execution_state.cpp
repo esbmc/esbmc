@@ -180,6 +180,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   smt_thread_guard = ex.smt_thread_guard;
   no_propagation = ex.no_propagation;
   partial_order = ex.partial_order;
+  lock_waits = ex.lock_waits;
 
   CS_number = ex.CS_number;
 
@@ -1397,15 +1398,26 @@ bool execution_statet::partial_order_mutex(
         sym,
         cur_state->source);
     if (!unlock)
+    {
+      wait_forever_at_lock();
       target->event(
         cur_state->guard.as_expr(),
         symex_targett::LOCK,
         sym,
         cur_state->source);
+    }
     return_zero(call);
   }
   cur_state->source.pc++;
   return true;
+}
+
+void execution_statet::wait_forever_at_lock()
+{
+  const expr2tc waits = symbol2tc(
+    get_bool_type(), "__ESBMC_po_waits$" + std::to_string(lock_waits++));
+  if (halt_thread_at_bound(waits))
+    cur_state->guard.add(not2tc(waits));
 }
 
 bool execution_statet::partial_order_join(
