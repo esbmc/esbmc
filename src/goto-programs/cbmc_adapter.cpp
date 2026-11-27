@@ -2008,8 +2008,14 @@ bool rewrite_array_copy(irept &code)
 // not two same-typed whole arrays -- heap buffers, offsets into an object,
 // differing extents -- into a call to the boilerplate body that sizes both
 // objects at run time (synthesize_cprover_additions).
-void rewrite_array_copy_call(irept &code, const irep_idt &stmt)
+bool rewrite_array_copy_call(irept &code, const irep_idt &stmt)
 {
+  const irept::subt &ops = code.get_sub();
+  if (
+    ops.size() != 2 || ops[0].find("type").id() != "pointer" ||
+    ops[1].find("type").id() != "pointer")
+    return false;
+
   irept func(irep_idt("symbol"));
   func.set(
     "identifier",
@@ -2024,6 +2030,7 @@ void rewrite_array_copy_call(irept &code, const irep_idt &stmt)
   code.get_sub().push_back(get_nil_irep());
   code.get_sub().push_back(func);
   code.get_sub().push_back(args);
+  return true;
 }
 
 // Reads a raw CBMC integer constant. Values are hex strings at this point --
@@ -2163,11 +2170,8 @@ const char *rewrite_whole_object_codet(
   {
     if (rewrite_array_copy(code))
       return "13";
-    if (code.get_sub().size() == 2)
-    {
-      rewrite_array_copy_call(code, stmt);
+    if (rewrite_array_copy_call(code, stmt))
       return "16";
-    }
   }
   else if (stmt == "array_equal")
   {
