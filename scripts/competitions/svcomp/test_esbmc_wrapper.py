@@ -1533,6 +1533,48 @@ class ThreadedTaskCommandLineTest(unittest.TestCase):
         self.assertNotIn("--context-bound", cmd)
 
 
+class PartialOrderCommandLineTest(unittest.TestCase):
+    """--partial-order replaces the flags it rejects and keeps the rest."""
+
+    def command(self, strat, prop):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { pthread_create(&t, 0, f, 0); }\n")
+            f.flush()
+            cmd = wrapper.get_command_line(strat, prop, 32, f.name, wrapper.esbmc_dargs, False)
+        return wrapper.partial_order_command_line(cmd, strat).split()
+
+    def test_reach_runs_incremental_bmc(self):
+        for strat in ("kinduction", "fixed", "falsi", "incr"):
+            words = self.command(strat, wrapper.Property.reach)
+            self.assertIn("--partial-order", words)
+            self.assertIn("--incremental-bmc", words)
+            self.assertIn("--interval-analysis", words)
+            for rejected in ("--k-induction", "--falsification", "--state-hashing"):
+                self.assertNotIn(rejected, words)
+
+    def test_data_race_checks_races_alongside_no_assertions(self):
+        words = self.command("kinduction", wrapper.Property.datarace)
+        self.assertIn("--data-races-check", words)
+        self.assertIn("--no-assertions", words)
+        self.assertNotIn("--data-races-check-only", words)
+
+
+class PartialOrderRejectionTest(unittest.TestCase):
+    """Only ESBMC's refusal of --partial-order sends a task to the default."""
+
+    def test_scope_and_flag_errors_are_rejections(self):
+        for line in ("ERROR: --partial-order does not support a call to "
+                     "pthread_cond_timedwait yet, at file main.c line 11",
+                     "ERROR: --partial-order cannot be combined with --k-induction",
+                     "ERROR: --falsify-context-bound cannot be combined with --partial-order"):
+            self.assertTrue(wrapper.PARTIAL_ORDER_REJECTED.search("Parsing\n" + line + "\n"))
+
+    def test_verdicts_and_other_errors_are_not(self):
+        for output in ("VERIFICATION SUCCESSFUL\n", "ERROR: Timed out\n",
+                       "ERROR: Out of memory\n", "partial-order: ERROR: --partial-order\n"):
+            self.assertIsNone(wrapper.PARTIAL_ORDER_REJECTED.search(output))
+
+
 class PointerArithCheckTest(unittest.TestCase):
     """Forming an out-of-range &a[i] dereferences nothing, so memsafety runs
     without the claim that reports it (#10787)."""

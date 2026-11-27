@@ -22,6 +22,22 @@
     </tasks>
   </rundefinition>
 
+  <rundefinition name="SV-COMP27_unreach-call_partial-order">
+    <option name="--partial-order"/>
+    <tasks name="C.unreach-call.Concurrency">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
+  <rundefinition name="SV-COMP27_no-data-race_partial-order">
+    <option name="--partial-order"/>
+    <tasks name="C.no-data-race.Concurrency">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
   <rundefinition name="SV-COMP27_valid-memsafety">
     <tasks name="C.valid-memsafety.Concurrency">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
