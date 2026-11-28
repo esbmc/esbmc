@@ -1312,10 +1312,14 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_for2t &f = to_code_for2t(code2);
 
-    // A condition-less `for(;;)` is excluded: legacy migrates the nil operand
-    // straight into the guard.
+    // Every frontend gives `for(;;)` a true condition. convert_for would
+    // migrate a nil one into an `IF !nil` guard that later passes dereference
+    // (docs/roadmap/frontends-to-irep2.md §85).
     if (is_nil_expr(f.cond))
-      return false;
+    {
+      log_error("for without condition");
+      abort();
+    }
 
     const locationt &here = effective_location(f.location, inherited);
     // As for the while body: any sub-conversion that fails delegates the whole

@@ -559,8 +559,10 @@ bool solidity_convertert::get_statement(
     convert_expression_to_code(init);
 
     // 2. annotate condition
+    // get_expr turns a null or empty node into a nil condition; an omitted
+    // condition is true.
     exprt cond = true_exprt();
-    if (stmt.contains("condition"))
+    if (!stmt.value("condition", nlohmann::json()).empty())
       if (get_expr(stmt["condition"], cond))
         return true;
 
