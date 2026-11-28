@@ -20,7 +20,7 @@ Bars, from `python3 scripts/irep2/bars.py` (B-1 as matching lines, B-2 refined):
 | phase | state | where |
 |---|---|---|
 | 0 — Option F spike | no-go for C/C++ (§36); Solidity's `sol_class` dropped (§37). What landed instead is an unreflected `irep_idt` field: `cpp_type` on the bitvector and float type kinds (§80), `cformat` on the constant kinds (#7864) | §36, §37, §80 |
-| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. Deleting them needs the five §31 origin sites settled and a Solidity decline census | §29–§31 |
+| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. Four of the five §31 origin sites now abort (§84, §85); deleting them needs §31.3's expression-statement operand settled and a Solidity decline census | §29–§31, §84, §85 |
 | 2 — W3 removal | struck (§37.3). B-4 is still not met: `cpp_expr2string.cpp`, `goto2c/expr2c.cpp`, `c_expr2string.cpp` and `clang_cpp_exception_id.cpp` read the spelling off legacy nodes | §33.4, §37 |
 | 3 / 9 — Python | the census recorded 5 077 of 5 078 agreeing, but on an asserting build five CORE tests abort under the flag (`precedence2`, `github_3866{,_fail}`, `return13-fail`, `missing-return14_fail`). Those, an SV-COMP run and the two-solver gate stand before the default can flip. `__ESBMC_list_eq` still unwinds without bound. The converter is largely untouched | `scope-python-irep2.md`, `scope-relational-float-reconciliation.md`, `scope-list-eq-unbounded-unwinding.md` |
 | 4 — shared kit | done | §38 |
@@ -2155,7 +2155,7 @@ field. It is the site to attack first if the round-trip is to go.
 | # | site | argument | strength |
 |---|---|---|---|
 | 3 | `break`, `continue`, `decl`-symbol | legacy aborts or asserts | **strong** — corpus-independent |
-| 1 | nil `for` condition | no producer in C/C++/Python | medium — Jimple/Solidity unread |
+| 1 | nil `for` condition | no producer in any frontend (§85) | **settled** — aborts since §85 |
 | 1 | expression code operand | no producer found | weak — open-ended guard |
 
 Together with §29 and §30 (0 declines over 8 660 corpus tests across four
@@ -4722,3 +4722,33 @@ print `break without target` and abort. There are no new tests, and the census i
 Next in Phase 1 is §31.2, the nil `for` condition. Jimple's and Solidity's loop lowering still has to be
 read for a `code_for2t` producer. If neither produces one, the guard becomes an abort the same way.
 §31.3's expression-statement code operand, and a Solidity decline census over all five sites, come after it.
+
+## 85. §31.2's nil `for` condition aborts too (2026-11-28)
+
+§31.2 left Jimple and Solidity unread. Jimple has no `code_fort` producer: its loops are gotos.
+Solidity's `ForStatement` lowering (`solidity_convert_stmt.cpp`) initialises
+`exprt cond = true_exprt();` and overwrites it only from a `condition` node, as clang-c does. The
+full producer list is `clang_c_convert.cpp` (`true` for an omitted condition, and `true` again when
+a condition variable moves into the body), `clang_cpp_convert.cpp`'s range-for (clang always
+supplies `begin != end`), Solidity, and the three builders in `builtin_functions.cpp` and the
+`cpp_delete` loop in `goto_convert.cpp`, which all write a relation. The IREP2 adjust passes
+(`clang_c_adjust_irep2.cpp`, `python_adjust.cpp`) rebuild a `code_for2t` from the operand they were
+given, and `migrate_expr` turns a nil `exprt` into a nil `expr2tc`, so none of them creates one.
+
+What legacy would do with one is not an abort, unlike §31.1. `convert_for` passes the nil operand
+through `remove_condition_sideeffects` and `migrate_expr` into `not2tc`, so the loop guard is
+`!nil`; `not2t::do_simplify` reads the kind of its operand, a null dereference once symex
+simplifies the guard. The native arm now aborts with
+`for without condition` instead of producing that guard. `return false` lines in
+`convert_native_rec`: 9 -> 8; origin sites 2 -> 1.
+
+Measured: `--goto-functions-only` with each test's flags over 17 448 tests (`esbmc`, `esbmc-cpp`,
+`cbmc`, `python`). No run prints the new diagnostic and none exits 134. §84's census cannot stand
+in for Jimple and Solidity: this arm declined silently then, so it printed nothing either way.
+
+As in §84, no regression test can tell the two binaries apart: no frontend produces the input, and
+the abort ends the process.
+
+Next in Phase 1 is §31.3, the expression-statement code operand, the last origin site. It is the
+open-ended one (`op.statement() != "cpp-throw"`) and needs a producer survey of its own. A Solidity
+decline census of the whole dispatcher follows it.
