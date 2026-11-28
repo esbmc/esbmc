@@ -247,40 +247,59 @@ void write_sarif_document(const std::string &out_path, json run)
 }
 } // namespace
 
-void sarif_goto_trace(
+std::vector<sarif_violation_t> sarif_violations(const goto_tracet &goto_trace)
+{
+  std::vector<sarif_violation_t> violations;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.type != symex_targett::ASSERT || step.guard)
+      continue;
+
+    violations.push_back(
+      {step.comment.empty() ? std::string("Assertion check") : step.comment,
+       step.pc->location.get_file().as_string(),
+       parse_line(step.pc->location.get_line().as_string())});
+  }
+  return violations;
+}
+
+void sarif_violation_report(
   const optionst &options,
-  const namespacet & /*ns*/,
-  const goto_tracet &goto_trace,
+  const std::vector<sarif_violation_t> &violations,
   const std::vector<dead_store_advisoryt> &advisories)
 {
   const std::string out_path = options.get_option("sarif-output");
   if (out_path.empty())
     return;
 
-  // Collect violation steps and the rules / CWE ids they exercise. The
-  // substring-to-rule mapping comes from util/cwe_mapping — single source of
-  // truth shared with the textual / JSON / GraphML outputs.
+  // The substring-to-rule mapping comes from util/cwe_mapping — single source
+  // of truth shared with the textual / JSON / GraphML outputs.
   std::vector<sarif_finding_t> findings;
-
-  for (const auto &step : goto_trace.steps)
+  for (const auto &v : violations)
   {
-    if (step.type != symex_targett::ASSERT || step.guard)
-      continue;
-
-    const cwe_rule_t &rule = cwe_rule_for(step.comment);
+    const cwe_rule_t &rule = cwe_rule_for(v.message);
     findings.push_back(
       {rule.sarif_id,
        rule.short_description,
        "error",
-       step.comment.empty() ? "Assertion check" : step.comment,
-       step.pc->location.get_file().as_string(),
-       parse_line(step.pc->location.get_line().as_string()),
+       v.message,
+       v.file,
+       v.line,
        rule.cwes});
   }
 
   append_dead_store_findings(advisories, findings);
 
   write_sarif_document(out_path, build_sarif_run(findings));
+}
+
+void sarif_goto_trace(
+  const optionst &options,
+  const namespacet & /*ns*/,
+  const goto_tracet &goto_trace,
+  const std::vector<dead_store_advisoryt> &advisories)
+{
+  sarif_violation_report(options, sarif_violations(goto_trace), advisories);
 }
 
 void sarif_dead_code(

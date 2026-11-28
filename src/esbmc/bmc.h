@@ -10,9 +10,11 @@
 #include <goto-symex/witness/witnesses.h>
 #include <goto-symex/testgen/pytest.h>
 #include <goto-symex/testgen/ctest.h>
+#include <goto-symex/trace/sarif.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <mutex>
 #include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
@@ -40,6 +42,10 @@ public:
   // its own document — so start_bmc() does not write a second one. There is a
   // single SARIF output path, so a second write would truncate the first.
   bool dead_store_sarif_written = false;
+  // Violations of every claim a --multi-property run solved, written to SARIF
+  // as one document by start_bmc().
+  std::vector<sarif_violation_t> sarif_violation_list;
+  std::mutex sarif_violation_mutex;
   enum ltl_res
   {
     ltl_res_good,
@@ -276,6 +282,10 @@ private:
 
   /// Print goto_functionst::reported_verdicts in a section of their own.
   void report_reported_properties() const;
+  // Writes the SARIF document start_bmc() owes when no trace path wrote one.
+  void write_pending_sarif();
+  // Adds a --multi-property witness's violations to the SARIF document.
+  void record_sarif_violations(const goto_tracet &trace, bool is_goto_cov);
 
   /// Whether the run left paths unexplored: it stopped before deciding every
   /// claim, cut a loop at its bound, or failed or never decided an unwinding
