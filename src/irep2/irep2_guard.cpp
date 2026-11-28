@@ -29,6 +29,113 @@ suffix_pointer_set(const guard2tc &g, std::size_t from)
   return s;
 }
 
+// A guard of at most this many conjuncts is probed against the other guard's
+// membership index; longer ones fall through to the prefix walks.
+constexpr std::size_t disjoint_probe_limit = 8;
+
+// True when `small` has few conjuncts and none is structurally equal to a
+// conjunct of `big`.
+// Costs O(|small| log |big|) however long `big` is. At a loop-exit merge the
+// parked guard is long and the folded one is a single disjunction, so the
+// prefix walks and hash sets below would otherwise cost O(|big|) per merge.
+bool disjoint_from(const guard2tc &small, const guard2tc &big)
+{
+  if (small.guard_list.size() > disjoint_probe_limit)
+    return false;
+  for (const auto &c : small.guard_list)
+    if (big.guard_list.may_contain(c))
+      return false;
+  return true;
+}
+
+// g1 -= g2 leaves g1 as it is, nodes included, when either side is true or no
+// conjunct of g2 occurs in g1.
+bool nothing_to_subtract(const guard2tc &g1, const guard2tc &g2)
+{
+  return g1.is_true() || g2.is_true() || disjoint_from(g2, g1);
+}
+
+// Splits g1 and g2 into their common conjuncts and the residual of each,
+// comparing conjuncts by node pointer.
+void partition_by_pointer(
+  const guard2tc &g1,
+  const guard2tc &g2,
+  guard2tc &common,
+  guard2tc &new_g1,
+  guard2tc &new_g2)
+{
+  if (g2.guard_list.size() <= g1.guard_list.size())
+  {
+    std::unordered_set<const expr2t *> g2_remaining;
+    g2_remaining.reserve(g2.guard_list.size());
+    for (const auto &c : g2.guard_list)
+      g2_remaining.insert(expr_ptr(c));
+
+    for (const auto &c : g1.guard_list)
+    {
+      if (g2_remaining.erase(expr_ptr(c)))
+        common.guard_list.push_back(c);
+      else
+        new_g1.guard_list.push_back(c);
+    }
+
+    for (const auto &c : g2.guard_list)
+      if (g2_remaining.count(expr_ptr(c)))
+        new_g2.guard_list.push_back(c);
+  }
+  else
+  {
+    std::unordered_set<const expr2t *> g1_remaining;
+    g1_remaining.reserve(g1.guard_list.size());
+    for (const auto &c : g1.guard_list)
+      g1_remaining.insert(expr_ptr(c));
+
+    for (const auto &c : g2.guard_list)
+      if (!g1_remaining.erase(expr_ptr(c)))
+        new_g2.guard_list.push_back(c);
+
+    for (const auto &c : g1.guard_list)
+    {
+      if (g1_remaining.count(expr_ptr(c)))
+        new_g1.guard_list.push_back(c);
+      else
+        common.guard_list.push_back(c);
+    }
+  }
+}
+
+// Pointer identity is the fast path for symex guards; when it finds nothing in
+// common, redo the split by value to keep the historical set semantics.
+void partition_by_value_if_disjoint(
+  const guard2tc &g1,
+  const guard2tc &g2,
+  guard2tc &common,
+  guard2tc &new_g1,
+  guard2tc &new_g2)
+{
+  if (common.is_true())
+  {
+    // Pointer identity is the fast path for symex guards, but preserve the
+    // historical set semantics for independently-created equal expressions.
+    std::unordered_set<expr2tc, irep2_hash> g2_set(
+      g2.guard_list.begin(), g2.guard_list.end());
+
+    new_g1.guard_list.clear();
+    new_g2.guard_list.clear();
+    for (const auto &c : g1.guard_list)
+    {
+      if (g2_set.erase(c))
+        common.guard_list.push_back(c);
+      else
+        new_g1.guard_list.push_back(c);
+    }
+
+    for (const auto &c : g2.guard_list)
+      if (g2_set.count(c))
+        new_g2.guard_list.push_back(c);
+  }
+}
+
 #ifndef NDEBUG
 // Reference O(N) element scan of the shared conjunct prefix. Kept only to
 // assert the O(Δ) cached-base version below stays in lock-step with it; the
@@ -334,7 +441,7 @@ void guard2tc::append(const guard2tc &other)
 
 guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
 {
-  if (g1.is_true() || g2.is_true())
+  if (nothing_to_subtract(g1, g2))
     return g1;
 
   // O(Δ) shared-prefix length via the cached and-chain (see
@@ -445,6 +552,18 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     return g1;
   }
 
+  // No common conjunct: the disjunction has nothing to factor out.
+  const bool g1_smaller = g1.guard_list.size() <= g2.guard_list.size();
+  if (g1_smaller ? disjoint_from(g1, g2) : disjoint_from(g2, g1))
+  {
+    expr2tc or_expr = or2tc(g1.as_expr(), g2.as_expr());
+    if (g1.is_single_symbol() && g2.is_single_symbol())
+      simplify(or_expr);
+    g1.make_true();
+    g1.add(or_expr);
+    return g1;
+  }
+
   // Fast structural subsumption before the set-algebra fallback. Guards
   // grown by copy-then-add share the old cached and-chain as the left
   // operand of the new chain, so ordered prefix cases can be detected by
@@ -534,6 +653,11 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     }
   }
 
+  return guard2tc::or_by_common_conjuncts(g1, g2);
+}
+
+guard2tc &guard2tc::or_by_common_conjuncts(guard2tc &g1, const guard2tc &g2)
+{
   // g1 || g2 == common && (g1' || g2'), where common is the conjunct
   // intersection and g1'/g2' are the residuals. Guard conjuncts are
   // hash-consed, so pointer identity is the cheap membership key here:
@@ -542,66 +666,8 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   guard2tc new_g1;
   guard2tc new_g2;
 
-  if (g2.guard_list.size() <= g1.guard_list.size())
-  {
-    std::unordered_set<const expr2t *> g2_remaining;
-    g2_remaining.reserve(g2.guard_list.size());
-    for (const auto &c : g2.guard_list)
-      g2_remaining.insert(expr_ptr(c));
-
-    for (const auto &c : g1.guard_list)
-    {
-      if (g2_remaining.erase(expr_ptr(c)))
-        common.guard_list.push_back(c);
-      else
-        new_g1.guard_list.push_back(c);
-    }
-
-    for (const auto &c : g2.guard_list)
-      if (g2_remaining.count(expr_ptr(c)))
-        new_g2.guard_list.push_back(c);
-  }
-  else
-  {
-    std::unordered_set<const expr2t *> g1_remaining;
-    g1_remaining.reserve(g1.guard_list.size());
-    for (const auto &c : g1.guard_list)
-      g1_remaining.insert(expr_ptr(c));
-
-    for (const auto &c : g2.guard_list)
-      if (!g1_remaining.erase(expr_ptr(c)))
-        new_g2.guard_list.push_back(c);
-
-    for (const auto &c : g1.guard_list)
-    {
-      if (g1_remaining.count(expr_ptr(c)))
-        new_g1.guard_list.push_back(c);
-      else
-        common.guard_list.push_back(c);
-    }
-  }
-
-  if (common.is_true())
-  {
-    // Pointer identity is the fast path for symex guards, but preserve the
-    // historical set semantics for independently-created equal expressions.
-    std::unordered_set<expr2tc, irep2_hash> g2_set(
-      g2.guard_list.begin(), g2.guard_list.end());
-
-    new_g1.guard_list.clear();
-    new_g2.guard_list.clear();
-    for (const auto &c : g1.guard_list)
-    {
-      if (g2_set.erase(c))
-        common.guard_list.push_back(c);
-      else
-        new_g1.guard_list.push_back(c);
-    }
-
-    for (const auto &c : g2.guard_list)
-      if (g2_set.count(c))
-        new_g2.guard_list.push_back(c);
-  }
+  partition_by_pointer(g1, g2, common, new_g1, new_g2);
+  partition_by_value_if_disjoint(g1, g2, common, new_g1, new_g2);
 
   // If either residual is empty, that side equals `common` itself, so
   // the disjunction reduces to `common || (common && other) ≡ common`.
@@ -639,7 +705,7 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   // (e.g. `a || !a` → true); ask the simplifier.
   expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
   if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
-    simplify(or_expr);
+    ::simplify(or_expr);
 
   // common already has its and-chain materialised; move it into g1
   // (transfers vector + cached chain without per-element refcount

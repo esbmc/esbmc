@@ -12791,6 +12791,25 @@ at N = 200 puts the inclusive cost in `get_original_name_rec`,
 Q3, not in guard algebra. Item 1 is not a fix on its own. Q3 is the next step,
 and items 2 and 3 remain untested.
 
+**Result of a membership index (2026-11-28, same machine, Z3, `scalbrk` and
+`scalret` with `--unwind N --no-unwinding-assertions --no-slice
+--smt-formula-only`).** Not item 2 or 3 as written. A trace of the exit merge
+shows what `|=` and `-=` see: after the first fold the current guard is one
+disjunction, and each parked guard has j conjuncts, sharing none with it. Both
+operators then walk or hash all j. `guard_seq` now keeps a persistent
+`immer::map` from a conjunct's structural hash to its count, and a guard of at
+most 8 conjuncts is probed against the other's index. No hit proves there is no
+structurally equal conjunct, so `g1 -= g2` returns `g1` untouched and
+`g1 |= g2` is `or2tc(g1, g2)` over the existing chains, with no rebuild and no
+change to the set semantics the guard tests pin. On master alone the change is
+inside noise (symex 7.8 s before, 10.7 s after at N = 1600), because Q3's
+walks dominate. On top of #11189 (Q3), symex before / after at N = 400 / 800 /
+1600: 0.098 / 0.371 / 1.402 s became 0.040 / 0.084 / 0.181 s, and encoding
+0.221 / 0.827 / 4.615 s became 0.033 / 0.095 / 0.236 s. At N = 3200 symex is
+0.378 s and encoding 0.567 s. Both double per doubling for `scalbrk` and
+`scalret`; assignment counts are unchanged. The slicer was not re-measured
+(`--no-slice`). The index costs one map update per `add`.
+
 **Must not break.** `g1 -= g2` and `g1 |= g2` must keep their meaning as
 sets of conjuncts, and the base must stay the left-leaning chain over the
 list, because `cached_prefix_expr` relies on that invariant. Keep the
