@@ -4742,9 +4742,9 @@ simplifies the guard. The native arm now aborts with
 `for without condition` instead of producing that guard. `return false` lines in
 `convert_native_rec`: 9 -> 8; origin sites 2 -> 1.
 
-Measured: `--goto-functions-only` with each test's flags over 17 448 tests (`esbmc`, `esbmc-cpp`,
-`cbmc`, `python`). No run prints the new diagnostic and none exits 134. §84's census cannot stand
-in for Jimple and Solidity: this arm declined silently then, so it printed nothing either way.
+Measured: `--goto-functions-only` with each test's flags over 18 030 tests (`esbmc`, `esbmc-cpp`,
+`cbmc`, `python`, `esbmc-solidity`, `jimple`). No run prints the new diagnostic and none exits 134.
+The one signal exit is `jimple/github_4715_identity_crash_01`, a KNOWNBUG that pins that segfault.
 
 As in §84, no regression test can tell the two binaries apart: no frontend produces the input, and
 the abort ends the process.
