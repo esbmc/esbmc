@@ -9,7 +9,7 @@ int main(void)
   {
     assert(x > 0);
     assert(y != 3);
-    y = 1 - y;
+    y = y + 2;
   }
   return 0;
 }

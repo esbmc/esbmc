@@ -1,5 +1,3 @@
-// KNOWNBUG since #7964: the inductive step proved this only by pinning r1 to
-// its loop-entry target; a sound proof needs the loop-head fixpoint.
 #include <assert.h>
 int nondet_int();
 int main() {

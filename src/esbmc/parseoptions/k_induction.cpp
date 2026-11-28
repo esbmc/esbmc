@@ -758,6 +758,8 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   options.set_option("no-unwinding-assertions", true);
   options.set_option("partial-loops", false);
   options.set_option("unwind", integer2string(k_step));
+  options.set_option("kind-base-cut-loops", "");
+  options.set_option("kind-base-cut-loops-running", "");
 
   bmct bmc(goto_functions, options, context);
 
@@ -769,6 +771,12 @@ tvt esbmc_parseoptionst::is_base_case_violated(
     // UNSAT for the exit code; it does not refute the base case.
     if (bmc.violates_only_the_abstraction())
       break;
+    // Lets the inductive step at this k use the claims as its hypothesis
+    // (see goto-symex/engine/inductive_claims.cpp).
+    options.set_option(
+      "kind-base-cut-loops",
+      integer2string(k_step) + ":" +
+        options.get_option("kind-base-cut-loops-running"));
     return tvt(tvt::TV_FALSE);
 
   case P_SMTLIB:
