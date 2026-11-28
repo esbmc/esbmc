@@ -4747,3 +4747,47 @@ was.
 
 Next in Phase 1 is §31.3's expression-statement code operand, the last origin site. After that
 comes the Solidity decline census over the round-trip fallback.
+
+## 87. Decline census over the round-trip fallback, Solidity included (2026-11-28)
+
+§85 left a Solidity decline census over the fallback's guards. This is that
+census, for the tree at `d9a6c87f6` (without #11162, so the expression-statement
+code operand of §31.3 is still a declining site).
+
+Method: a temporary `fprintf` in `convert_function`, on the branch that discards
+`try_convert_body_native` and calls `goto_convert_rec`, printing the function id.
+Each test ran as `esbmc <file> <test.desc flags> --goto-functions-only` on a
+RelWithDebInfo build with Z3 and the Solidity frontend. The print was not committed.
+
+| suite | tests | fallbacks |
+|---|---:|---:|
+| `esbmc-solidity` | 547 | 0 |
+| `jimple` | 37 | 0 |
+| `cbmc` | 268 | 0 |
+| `esbmc` | 3 879 | 3 |
+| `esbmc-cpp` (recursive) | 3 389 | 3 |
+| `python` | 9 929 | 0 |
+
+The six hits are the tests that pass `--no-irep2-native-body` (`*_legacy`,
+`*_optout_*`), which skip the native attempt by design; every one reports
+`__ESBMC_ltl_sample`. No test that attempts the native path declined. Solidity
+is now measured: none of its 547 `.solast` inputs reaches a declining guard
+(this build has no `solc`, and none is needed, since each test carries its AST).
+
+Producers of the kinds the final `return false` of `convert_native_rec` declines:
+`code_asm2t` has no producer in a frontend body (the clang C frontend turns
+`GCCAsmStmt` and `MSAsmStmt` into `code_skipt`, `clang_c_convert.cpp`, and no
+other file builds a statement `"asm"`). A `printf` code statement is built only
+inside `goto_convert`'s `builtin_functions.cpp`, after the body is converted.
+This was read from the code, not probed, and it covers these two kinds only.
+
+Not covered: this census does not make the fallback deletable. It does not
+settle statement kinds that `convert()` sends to `OTHER` or other handlers and
+that `convert_native_rec` has no arm for, `--goto-functions-only` exercises
+only conversion (not later passes), and suites outside the six above were not
+run. A zero here is evidence, per §30.2, not a proof.
+
+Next: with #11162 merged, repeat the census to confirm §31.3 is closed, then
+enumerate each statement kind `convert()` handles against the native arms and
+either add an arm with a producer-backed test or an abort with the legacy
+diagnostic.
