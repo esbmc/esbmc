@@ -1,0 +1,6 @@
+regression/esbmc-unix/partial_order_struct
+regression/esbmc-unix/partial_order_struct_fail
+regression/esbmc-unix/partial_order_struct_pointer
+regression/esbmc-unix/partial_order_struct_pointer_fail
+regression/esbmc-unix/partial_order_reject_race_struct
+regression/esbmc-unix/partial_order_events_struct

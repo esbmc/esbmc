@@ -21,11 +21,21 @@ const expr2tc &value_read(const symex_target_equationt::SSA_stept &step)
   return step.type == symex_targett::SHARED_WRITE ? step.rhs : step.lhs;
 }
 
-/// \p a == \p b, element by element for an array of constant size: some
-/// solvers, Bitwuzla among them, do not decide an equality with a constant
-/// array that is not a top-level assertion.
+/// \p a == \p b, element by element for an array of constant size and field
+/// by field for a struct: some solvers, Bitwuzla among them, do not decide an
+/// equality with a constant array that is not a top-level assertion.
 expr2tc same_value(const expr2tc &a, const expr2tc &b)
 {
+  if (is_struct_type(a->type))
+  {
+    const struct_type2t &type = to_struct_type(a->type);
+    std::vector<expr2tc> fields;
+    for (size_t i = 0; i < type.members.size(); ++i)
+      fields.push_back(same_value(
+        member2tc(type.members[i], a, type.member_names[i]),
+        member2tc(type.members[i], b, type.member_names[i])));
+    return conjunction(fields);
+  }
   if (!is_array_type(a->type))
     return equality2tc(a, b);
   const array_type2t &type = to_array_type(a->type);

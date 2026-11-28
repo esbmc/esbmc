@@ -2,8 +2,8 @@
 
 **Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
-2026-11-24. `--partial-order` verifies programs on global scalars and arrays
-of them, including through pointers, with threads created in loops, mutexes,
+2026-11-24. `--partial-order` verifies programs on global scalars, and
+arrays and structs of them, including through pointers, with threads created in loops, mutexes,
 condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
@@ -342,6 +342,15 @@ halts was taken never to return, since the disjunction of no halts is true,
 and the joining thread's later claims held. So main's `reach_error()`, which
 `--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
 never reported. Fixed: such a thread ends (`partial_order_halt_*`).
+
+A global struct whose fields are scalars, arrays or structs of them is one
+object, as an array is: a field read reads the struct, and a field write,
+directly or through a pointer, updates it. On the SV-COMP subset the scope
+check rejected 91 tasks for a global that was neither a scalar nor an array
+of scalars; how many of them are now in scope is not measured yet.
+`pthread_` types stay out, since
+LOCK and UNLOCK events order them, and `--data-races-check` rejects a global
+struct as it does an array (`partial_order_struct*`).
 
 ## 5. Tests
 
