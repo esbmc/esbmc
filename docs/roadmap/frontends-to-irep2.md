@@ -20,7 +20,7 @@ Bars, from `python3 scripts/irep2/bars.py` (B-1 as matching lines, B-2 refined):
 | phase | state | where |
 |---|---|---|
 | 0 — Option F spike | no-go for C/C++ (§36); Solidity's `sol_class` dropped (§37). What landed instead is an unreflected `irep_idt` field: `cpp_type` on the bitvector and float type kinds (§80), `cformat` on the constant kinds (#7864) | §36, §37, §80 |
-| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. §31's five origin sites are settled (§84–§86); the remaining guards are censused over Solidity and the C/C++ suites: none reached (§87); deleting the fallback needs each guard argued unreachable or made an abort | §29–§31, §84–§87 |
+| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. §31's five origin sites are settled (§84–§86); the remaining guards are censused over Solidity and the C/C++ suites: none reached (§87), and jimple, Python and the C++ tree reach no whole-body fallback (§88); deleting the fallback needs each guard argued unreachable or made an abort | §29–§31, §84–§88 |
 | 2 — W3 removal | struck (§37.3). B-4 is still not met: `cpp_expr2string.cpp`, `goto2c/expr2c.cpp`, `c_expr2string.cpp` and `clang_cpp_exception_id.cpp` read the spelling off legacy nodes | §33.4, §37 |
 | 3 / 9 — Python | the census recorded 5 077 of 5 078 agreeing, but on an asserting build five CORE tests abort under the flag (`precedence2`, `github_3866{,_fail}`, `return13-fail`, `missing-return14_fail`). Those, an SV-COMP run and the two-solver gate stand before the default can flip. `__ESBMC_list_eq` still unwinds without bound. The converter is largely untouched | `scope-python-irep2.md`, `scope-relational-float-reconciliation.md`, `scope-list-eq-unbounded-unwinding.md` |
 | 4 — shared kit | done | §38 |
@@ -4818,3 +4818,36 @@ legacy-equivalence argument §84 made for break and continue.
 No source change accompanies this section and no test can pin a zero, so there is no mutation
 check. Next in Phase 1 is the C-Dead case: either argue each of the three guards unreachable or
 make each abort as in §84, then delete `goto_convert_rec`'s whole-body call.
+
+## 88. The whole-body fallback over jimple, Python and the C++ tree (2026-11-28)
+
+§87 left `jimple`, the 9 929 `python` tests and the `esbmc-cpp` tree uncovered. A separate run
+covers them, for the whole-body fallback only: a temporary `fprintf` in `convert_function`, on the
+branch that discards `try_convert_body_native` and calls `goto_convert_rec`, printing the function
+id. Each test ran as `esbmc <file> <test.desc flags> --goto-functions-only` on a RelWithDebInfo
+build with Z3 and the Solidity frontend. The print was not committed.
+
+| suite | tests | whole-body fallback |
+|---|---:|---:|
+| `jimple` | 37 | 0 |
+| `python` | 9 929 | 0 |
+| `esbmc-cpp` (recursive) | 3 389 | 3 |
+
+The three hits pass `--no-irep2-native-body` (`*_legacy`, `*_optout_*`) and report
+`__ESBMC_ltl_sample`, so they take the fallback by request, like §87's three in `esbmc`. No test
+that attempts the native path declined.
+
+The run measured `d9a6c87f6`, before #11162, when §31.3's expression-statement code operand was
+still a decline site. #11162 removed that site without adding one, so it cannot turn these zeros
+into hits. Other changes since `d9a6c87f6` were not re-measured.
+
+Producers of the kinds the final `return false` of `convert_native_rec` declines: `code_asm2t` has
+no producer in a frontend body (the clang C frontend turns `GCCAsmStmt` and `MSAsmStmt` into
+`code_skipt`, `clang_c_convert.cpp`, and no other file builds a statement `"asm"`). A `printf` code
+statement is built only inside `goto_convert`'s `builtin_functions.cpp`, after the body is
+converted. This was read from the code, not probed, and it covers these two kinds only.
+
+Not covered: the marker sat on the whole-body fallback, not on each guard, so these suites have no
+per-guard counts. Statement kinds that `convert()` sends to `OTHER` or other handlers and that
+`convert_native_rec` has no arm for are not settled, and `--goto-functions-only` exercises only
+conversion. A zero here is evidence, per §30.2, not a proof.

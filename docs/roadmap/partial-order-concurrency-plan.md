@@ -2,12 +2,13 @@
 
 **Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
-2026-11-24. `--partial-order` verifies programs on global scalars and arrays
-of them, including through pointers, with threads created in loops, mutexes,
-condition variables, `pthread_exit` and the scheduler intrinsics phase 1
-lists, without assumptions, and checks data races on scalars and deadlocks
-on mutexes and joins. Its counterexamples list steps in the order the
-solver's clocks give them, and its violation witnesses carry thread ids.
+2026-11-24. `--partial-order` verifies programs on global scalars, and
+arrays and structs of them, including through pointers, with threads created
+in loops, mutexes, condition variables, `pthread_exit` and the scheduler
+intrinsics phase 1 lists, without assumptions, and checks data races on
+scalars and deadlocks on mutexes and joins. Its counterexamples list steps
+in the order the solver's clocks give them, and its violation witnesses carry
+thread ids.
 A loop or recursion cut by `--no-unwinding-assertions` stops only its own
 thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
@@ -357,6 +358,14 @@ every verdict right; both decide 126 and agree on all of them. The scope
 check rejects 101, 91 for a global that is not a scalar or an array of
 scalars; 64 time out and 15 run out of memory, against 162 and 44 for the
 default.
+
+A global struct whose fields are scalars, arrays or structs of them is one
+object, as an array is: a field read reads the struct, and a field write,
+directly or through a pointer, updates it. How many of the 91 SV-COMP tasks
+the scope check rejected for such a global are now in scope is not measured
+yet. `pthread_` types stay out, since LOCK and UNLOCK events order them,
+and `--data-races-check` rejects a global struct as it does an array
+(`partial_order_struct*`).
 
 ## 5. Tests
 

@@ -852,15 +852,26 @@ void goto_symext::split_leaves(
   const expr2tc &rhs,
   std::vector<std::pair<expr2tc, expr2tc>> &leaves)
 {
-  const struct_type2t &st = to_struct_type(lhs->type);
+  const bool array = is_array_type(lhs->type);
   const std::vector<expr2tc> &fields =
-    to_constant_struct2t(lhs).datatype_members;
+    array ? to_constant_array2t(lhs).datatype_members
+          : to_constant_struct2t(lhs).datatype_members;
   for (size_t k = 0; k < fields.size(); k++)
   {
-    expr2tc rhs_k = is_constant_struct2t(rhs)
-                      ? to_constant_struct2t(rhs).datatype_members[k]
-                      : member2tc(st.members[k], rhs, st.member_names[k]);
-    if (is_constant_struct2t(fields[k]))
+    expr2tc rhs_k;
+    if (is_constant_struct2t(rhs))
+      rhs_k = to_constant_struct2t(rhs).datatype_members[k];
+    else if (is_constant_array2t(rhs))
+      rhs_k = to_constant_array2t(rhs).datatype_members[k];
+    else if (array)
+      rhs_k = index2tc(
+        fields[k]->type, rhs, constant_int2tc(index_type2(), BigInt(k)));
+    else
+    {
+      const struct_type2t &st = to_struct_type(lhs->type);
+      rhs_k = member2tc(st.members[k], rhs, st.member_names[k]);
+    }
+    if (is_constant_struct2t(fields[k]) || is_constant_array2t(fields[k]))
       split_leaves(fields[k], rhs_k, leaves);
     else
       leaves.emplace_back(fields[k], rhs_k);

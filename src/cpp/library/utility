@@ -340,6 +340,46 @@ struct tuple_element<1, pair<T1, T2>>
   typedef T2 type;
 };
 
+// [tuple.helper]: cv-qualified types forward to the unqualified one. The alias
+// drops the specialisation when T has no tuple_size, so a `const auto [a, b]`
+// binding of an ordinary struct still decomposes member-wise.
+template <typename T, std::size_t = tuple_size<T>::value>
+using __enable_if_has_tuple_size = T;
+
+template <typename T>
+struct tuple_size<const __enable_if_has_tuple_size<T>> : tuple_size<T>
+{
+};
+
+template <typename T>
+struct tuple_size<volatile __enable_if_has_tuple_size<T>> : tuple_size<T>
+{
+};
+
+template <typename T>
+struct tuple_size<const volatile __enable_if_has_tuple_size<T>>
+  : tuple_size<T>
+{
+};
+
+template <std::size_t I, typename T>
+struct tuple_element<I, const T>
+{
+  typedef const typename tuple_element<I, T>::type type;
+};
+
+template <std::size_t I, typename T>
+struct tuple_element<I, volatile T>
+{
+  typedef volatile typename tuple_element<I, T>::type type;
+};
+
+template <std::size_t I, typename T>
+struct tuple_element<I, const volatile T>
+{
+  typedef const volatile typename tuple_element<I, T>::type type;
+};
+
 // Index dispatch, so get() selects the member by specialisation rather than
 // by casting between the two member types.
 template <std::size_t I>
