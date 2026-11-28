@@ -12879,6 +12879,23 @@ pairs (`vla_pointer_stride{,_fail}` and its siblings) must stay green. The
 value-set skip must leave the value sets of structs and unions that hold a
 pointer unchanged.
 
+**Done in part (2026-11-28).** Three of the four walks are gone from
+`phi_function` and `assignment`: `rename_type` now runs on the two arms before
+the `if2t` exists and only `rename_own_type` runs on the node; the node gets
+`do_simplify()` alone, with a full `simplify` only if that folds; and the value
+set renames the arms of an `if2t` rhs, since `value_sett::assign` never reads its
+condition. Measured on Linux x86-64, Release, Z3, `scalbrk` with `--unwind N
+--no-unwinding-assertions --program-only`, symex time before / after:
+N = 400 0.43 / 0.09 s, N = 800 1.76 / 0.28 s, N = 1600 7.90 / 1.11 s.
+`scalret` N = 400 0.43 / 0.09 s, N = 800 1.69 / 0.29 s. Assignment counts are
+unchanged. Left: symex still grows ×3.1 to ×4.0 per doubling, so Q1 items 2 and
+3 are not yet shown unnecessary, and `scalret` at N = 1600 did not finish in
+120 s. The `rename_type` early return and the pointer-free value-set skip were
+not needed to get this and were not done. Encoding and the slicer (Q4) were not
+re-measured. Regression: `esbmc/q3_exit_merge_pointer{,_fail}` pin the verdicts
+of a pointer merged at a loop exit; they pass before and after, because the
+change keeps verdicts and a count-based growth gate cannot see it.
+
 #### Q4. The slicer and the encoder re-walk the rebuilt guards (P1, slicer and SMT)
 
 `symex_slicet::collect_dependencies` (`equation/slice.cpp:10`) and
