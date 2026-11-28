@@ -12855,6 +12855,23 @@ value-set update for a left-hand side whose type holds no pointer, once a
 read of `value_sett::assign` confirms it does nothing for such a type.
 Otherwise build the memo once per `assignment`, not once per walk.
 
+**Result of the `rename_type` step alone (2026-11-28, Linux x86-64, Release,
+Z3, master `09fa278af`).** Tried and not kept. `phi_function` renamed the two
+arms before building the `if2t` and called `rename_own_type` on the result,
+so the guard operand was never walked or detached by `rename_type`. `scalbrk`
+(§16.6) with `--unwind N --no-unwinding-assertions --program-only`, symex time
+before / after, two runs each: N = 200 0.109 / 0.110 and 0.093 s, N = 400
+0.41 to 0.46 / 0.36 s, N = 800 1.70 to 1.93 / 1.73 to 1.74 s. Assignments are
+2,816 / 5,616 / 11,216 both times. The difference at N = 800 is inside
+run-to-run noise, so `rename_type` is not the dominant walk. A callgrind run
+at `--unwind 150` (without `--program-only`, which adds a `c2expr` print of
+every guard) puts the inclusive cost in `get_original_name_rec`, then
+`expr2t::simplify`, then `rename_type`, in that order. The value-set skip
+cannot be taken for every non-pointer left-hand side: `value_sett::assign`
+tracks integer-typed values (`uintptr_t` holding an address), so only the
+pointer-free aggregate case is already skipped (`type_has_pointer`, #7521).
+The next step is the `get_original_name` memo in `assignment`.
+
 **Result of the first two walks (2026-11-28, Linux x86-64, Release, Z3,
 master `09fa278af`).** `phi_function` now runs `do_simplify` on the new `if2t`
 node alone, the guard having been simplified by the guard algebra, and renames
@@ -12865,7 +12882,7 @@ encoding 0.53 / 2.81 / 13.6 s before, 0.18 / 0.67 / 3.1 s after. Assignments
 are unchanged. Slicing and encoding fall to near linear, which supports Q4's
 hypothesis. Symex still grows about ×4 to ×6 per doubling: Q1's guard rebuild
 and the `get_original_name` memo in `assignment` are untouched. Open: the
-value-set skip and the per-`assignment` memo.
+per-`assignment` memo; the value-set skip is settled above.
 
 **Must not break.** R61, R62 and R82 were fixed by making `rename_type`
 rename every symbolic size, through pointer subtypes. The flag must be set
