@@ -13,7 +13,8 @@ thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
-assumption, `abort()` included, stops only its own thread.
+assumption, `abort()` included, stops only its own thread, and a join on a
+thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`. Loop guards are not
 pruned by the interval domain, which would carry one thread's writes into
@@ -315,6 +316,12 @@ arrays, so a join on `id[j]` reads the ids' array in its event's guard; the
 slicer now counts that read, where it had dropped the stores to the array
 (`partial_order_incremental_join*`). `--k-induction` is still rejected; the
 SV-COMP wrapper's concurrency path is the next step towards a benchexec run.
+
+A halt hid violations. Once any thread halted, a join on a thread that never
+halts was taken never to return, since the disjunction of no halts is true,
+and the joining thread's later claims held. So main's `reach_error()`, which
+`--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
+never reported. Fixed: such a thread ends (`partial_order_halt_*`).
 
 ## 5. Tests
 

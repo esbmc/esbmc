@@ -143,7 +143,7 @@ struct haltst
     std::vector<expr2tc> all = halts[thread];
     for (const auto &[guard, joined] : joins[thread])
       all.push_back(and2tc(guard, never_ends(joined)));
-    return stuck[thread] = disjunction(all);
+    return stuck[thread] = all.empty() ? gen_false_expr() : disjunction(all);
   }
 };
 } // namespace
