@@ -249,6 +249,11 @@ public:
     /** Record if the function body is hidden */
     bool hidden;
 
+    /** A --partial-order halt in this activation, or in one it called,
+     *  narrowed the guard, which records no assumption step; returning must
+     *  keep the narrowed guard rather than restore entry_guard. */
+    bool halted;
+
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
@@ -258,6 +263,7 @@ public:
         va_cursor(UINT_MAX),
         va_limit(UINT_MAX),
         hidden(false),
+        halted(false),
         stack_frame_total(0)
     {
       level1.thread_id = thread_id;

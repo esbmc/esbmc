@@ -1115,7 +1115,8 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false())
+  const bool halted = frame.halted;
+  if (!cur_state->guard.is_false() && !halted)
     cur_state->guard = frame.entry_guard;
 
   // retire locals from L2 renaming
@@ -1164,6 +1165,8 @@ void goto_symext::pop_frame()
     --cur_state->function_unwind[frame.function_identifier];
 
   cur_state->pop_frame();
+  if (halted && !cur_state->call_stack.empty())
+    cur_state->top().halted = true;
 }
 
 void goto_symext::symex_end_of_function()
