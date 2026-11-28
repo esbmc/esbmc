@@ -12791,6 +12791,20 @@ at N = 200 puts the inclusive cost in `get_original_name_rec`,
 Q3, not in guard algebra. Item 1 is not a fix on its own. Q3 is the next step,
 and items 2 and 3 remain untested.
 
+**Cost of the guard algebra itself (2026-11-28, Linux x86-64, Release, Z3,
+master `e4f9dcd4c`).** Measured before building items 2 and 3, and they are
+not worth building yet. `scalbrk` (§16.6), symex alone with `--program-only`:
+N = 200 / 400 / 800 / 1600 take 0.120 / 0.436 / 1.681 / 8.644 s (2,816 /
+5,616 / 11,216 / 22,416 assignments), ×3.6 to ×5.1 per doubling. A callgrind
+run at `--unwind 150` gives 3.12 G instructions in all. `operator|=` is 34 M
+inclusive (1.1%); `operator-=` is below the report's 99% cutoff.
+`merge_gotos` is 604 M (19.3%) and `phi_function` 560 M (18.0%), so nearly all
+of `merge_gotos` is the phi walks of Q3, not the guard set algebra. The
+heaviest inclusive entries are `get_original_name_rec`, `expr2t::simplify`
+and `goto_symex_statet::rename_type`, as Q3 says. Items 2 and 3 can remove at
+most the 1.1%. Take them only after Q3 (#11185, #11189) lands and a new
+profile shows the guard algebra as the largest remaining cost.
+
 **Must not break.** `g1 -= g2` and `g1 |= g2` must keep their meaning as
 sets of conjuncts, and the base must stay the left-leaning chain over the
 list, because `cached_prefix_expr` relies on that invariant. Keep the
