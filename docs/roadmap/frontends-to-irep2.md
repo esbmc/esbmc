@@ -4722,3 +4722,28 @@ print `break without target` and abort. There are no new tests, and the census i
 Next in Phase 1 is §31.2, the nil `for` condition. Jimple's and Solidity's loop lowering still has to be
 read for a `code_for2t` producer. If neither produces one, the guard becomes an abort the same way.
 §31.3's expression-statement code operand, and a Solidity decline census over all five sites, come after it.
+
+## 85. §31.2's nil `for` condition had a producer, and now aborts (2026-11-28)
+
+§31.2 left Jimple and Solidity unread. Jimple builds no `for` at all. Solidity does produce a nil
+condition. `get_statement` defaults the condition to `true` only when the `condition` key is
+absent. When the key holds JSON `null`, it calls `get_expr`, which maps `null` to `NullExpr` and
+then to `nil_exprt`. solc 0.8.28 leaves the key out for an omitted condition. A hand-edited AST
+with `"condition": null` shows the cost. The native arm declines, `convert_for` migrates the nil
+operand into `IF !nil THEN GOTO`, and every verifying run then segfaults, first in
+`goto_array_loop_summary`. With `--no-summarize-array-loops` it segfaults later. So the fallback
+never produced a verdict here.
+
+Two changes. The Solidity `for` lowering treats a null `condition` the same as an absent one, so
+the condition becomes `true` (`regression/esbmc-solidity/for_null_cond_{1,2}`). With no producer
+left, the native arm now aborts with `for without condition`, the same way §84 handled its three
+sites. Origin sites: 2 -> 1. Reverting the frontend fix makes both tests stop at that diagnostic
+instead of a SIGSEGV, so the abort is live under a mutant. Mapping null to `false` instead flips
+`for_null_cond_1`.
+
+This is not covered: a null `initializationExpression` or `loopExpression` is still refused at
+`operator[]` with a JSON type error (exit 6). That is a refusal, not a verdict, and is left as it
+was.
+
+Next in Phase 1 is §31.3's expression-statement code operand, the last origin site. After that
+comes the Solidity decline census over the round-trip fallback.

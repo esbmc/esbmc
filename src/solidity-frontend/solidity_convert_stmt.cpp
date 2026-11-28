@@ -559,8 +559,10 @@ bool solidity_convertert::get_statement(
     convert_expression_to_code(init);
 
     // 2. annotate condition
+    // An omitted condition is either absent or null, depending on the solc
+    // JSON writer; get_expr would turn null into a nil condition.
     exprt cond = true_exprt();
-    if (stmt.contains("condition"))
+    if (stmt.contains("condition") && !stmt["condition"].is_null())
       if (get_expr(stmt["condition"], cond))
         return true;
 
