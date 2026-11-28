@@ -40,6 +40,8 @@ host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
 may start with that exception recorded.**
+> Phase 3, `struct_array_ite_new_index_fail`'s Z3 timeout is fixed in draft
+> `feat/field-sensitive-ssa-phase3-whole-copy-only` (§8.46).
 > Phase 3, first part (nested structs; arrays of structs by constant index are
 > in draft PR from `feat/field-sensitive-ssa-phase3-arrays-of-structs`, §8.43, and
 > k-induction havoc already goes through member chains, §8.42): a struct member of a split object is split in turn,
@@ -2717,3 +2719,36 @@ not run.
   explained or fixed. Not yet investigated.
 - The other diffs listed by the run (`github_10965*`, `github_5393_array_member*`,
   `github_10789_gmtime_fail`) were not re-inspected here.
+
+### 8.46 Phase 3: `struct_array_ite_new_index_fail` under Z3 (draft, gate not met)
+
+Cause, measured on master `1da5224f6` (Z3 4.13.3, RelWithDebInfo): `w1` is a
+`struct W` holding `struct S e[4096]` that the program only copies whole
+(`b ? w1 : w2`). The flag split it into 4098 objects, so Z3 got 4096
+free 64-bit variables in place of one array and gave no verdict in 100 s;
+without the flag it answers in 0.33 s. Symex took 0.05 s, so the cost is in
+the solver, not in symex.
+
+Fix: an object that is not address-taken and has no member or constant index
+named on it directly is not split, since a split gains nothing there. With it
+the test reports `VERIFICATION FAILED` in 0.28 s with the flag. Pair
+`field_sensitive_ssa_whole_copy_only` (SUCCESSFUL) and `_fail` (FAILED). With
+the fix reverted and a 20 s cap, `_fail` times out; the SUCCESSFUL half still
+passes (10.5 s), so it pins no verdict change. `field_sensitive_ssa_through_pointer*`
+now expect 2 split objects, not 3: the compound-literal temporary is only
+copied whole.
+
+Measured: unreachability harness for the new branch (whole copies only,
+`--enable-unreachability-intrinsic --unwind 10`, Z3): `VERIFICATION FAILED`
+with and without the flag. The 82 ctest tests matching `field_sensitive|
+field-sensitivity` pass. Corpus, Z3, flag on / off, seconds:
+`global_callee` w512 0.4/1.4, w2048 0.5/5.6; `local_addr_once` 0.2/4.8,
+0.2/14.2; `local_writes` 0.2/4.3, 0.2/14.0; `repro7521` 1.0/0.8, 1.4/0.9
+(slower with the flag; not compared with master). A sample of every fifth
+`CORE` test of `regression/esbmc` and `regression/esbmc-cpp/cpp` (not
+solver, k-induction, witness or flag tests; 20 s, Z3) differs in one test,
+`vector_reserve_realloc_fail`, where the run without the flag timed out under
+load.
+
+Not measured: Bitwuzla (not installed), the Python suite, trace text diffs,
+an assert-enabled build, the full suites, SV-COMP.

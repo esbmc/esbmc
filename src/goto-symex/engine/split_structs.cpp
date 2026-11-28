@@ -17,6 +17,8 @@ public:
   /* Objects whose address is taken as `&s`; pointer_scant decides whether
    * every access through that address keeps a field path. */
   std::unordered_set<irep_idt, irep_id_hash> addressed;
+  /* Objects some member or constant index of which is named directly. */
+  std::unordered_set<irep_idt, irep_id_hash> fielded;
 
   /* How a use under the current node may reach an object: any use escapes
    * under an address or a side effect, and a whole one under a byte-level or
@@ -117,6 +119,7 @@ public:
     const expr2tc *source = field_source(e);
     if (source && is_symbol2t(*source))
     {
+      fielded.insert(see(*source));
       if (is_index2t(e))
         note(to_index2t(e).index);
       note(*source, use == uset::any_escapes ? use : uset::plain);
@@ -474,6 +477,8 @@ void split_structst::analyse(
   {
     if (
       scan.excluded.count(name) ||
+      (!scan.fielded.count(name) && !scan.addressed.count(name) &&
+       !address_taken_locals.count(name)) ||
       ((scan.addressed.count(name) || address_taken_locals.count(name)) &&
        (is_array_type(type) || !by_field_paths.count(name))))
       continue;
