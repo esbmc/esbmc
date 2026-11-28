@@ -4,6 +4,9 @@ main
 main.out
 tests.log
 
+# Coverage-instrumented runs drop these beside the test they ran.
+*.profraw
+
 # Stray artefacts from a test run started inside the source tree.
 /*.graphml
 /*.yml

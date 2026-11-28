@@ -2355,6 +2355,22 @@ void bmct::report_coverage_verbose(
   }
 }
 
+/// Modes where a global verdict from this level would be wrong or duplicated:
+/// k-induction prints its own messages; the diagnostic pass has already
+/// printed per-property results; a coverage run replaced the program's
+/// assertions with reachability probes, so its result is the [Coverage] block
+/// rather than a verdict; and a Houdini filtering round's verdict is about a
+/// guessed invariant set, not the program -- the user's own assertions
+/// routinely fail there while the pool is still being narrowed.
+static bool suppresses_global_verdict(const optionst &options)
+{
+  return options.get_bool_option("k-induction-parallel") ||
+         options.get_bool_option("diagnose-unknown-properties") ||
+         options.get_bool_option("coverage-measurement") ||
+         options.get_bool_option("houdini-probe") ||
+         options.get_bool_option("houdini-defer-verdict");
+}
+
 /// Whether this run's success proves each loop invariant it checked for every
 /// state of the C program that reaches the loop from main (#10853).
 bool bmct::proves_loop_invariants() const
@@ -2399,17 +2415,7 @@ bool bmct::proves_the_program() const
 
 void bmct::report_result(smt_resultt &res)
 {
-  // k-induction prints its own messages
-  if (options.get_bool_option("k-induction-parallel"))
-    return;
-  // Diagnostic pass: report_property_verdicts already prints the per-property
-  // results; suppress any global verdict from this level.
-  if (options.get_bool_option("diagnose-unknown-properties"))
-    return;
-  // A coverage run replaced the program's assertions with reachability
-  // probes, so it neither proved nor refuted anything about the program.
-  // Its result is the [Coverage] block, not a verification verdict.
-  if (options.get_bool_option("coverage-measurement"))
+  if (suppresses_global_verdict(options))
     return;
 
   // Dead-code analysis is advisory. Its instrumented reachability probes are
@@ -4675,6 +4681,22 @@ void report_k_step_property_table(
     print_partial_report_note();
 }
 
+static void print_solver_timing(
+  const std::string &solver,
+  double total_time_ms,
+  size_t decided)
+{
+  if (solver.empty() || decided == 0)
+    return;
+
+  std::ostringstream timing_oss;
+  timing_oss << "Solver: " << solver << " • Decision procedure total time: "
+             << time2string(total_time_ms) << "s"
+             << " • Avg: " << time2string(total_time_ms / decided)
+             << "s/property";
+  log_result("{}", timing_oss.str());
+}
+
 bool bmct::search_stopped_short() const
 {
   if (report_incomplete || saw_bounded_loop_truncation)
@@ -4753,6 +4775,12 @@ void bmct::report_reported_properties() const
 
 void bmct::report_property_verdicts(smt_resultt res) const
 {
+  // See report_result: a filtering round's per-property table describes a
+  // candidate set, not the program. do_houdini_strategy still reads the
+  // verdicts programmatically from the table; this only suppresses printing.
+  if (options.get_bool_option("houdini-probe"))
+    return;
+
   const bool final = reports_final_verdict(res);
 
   // --dead-code-check turns --multi-property on implicitly. Its live-branch
@@ -4810,17 +4838,7 @@ void bmct::report_property_verdicts(smt_resultt res) const
   // the properties that reached a verdict, not over the whole table: the
   // never-checked ones cost the solver nothing and would dilute it.
   const size_t decided = counts.passed + counts.failed + counts.unknown;
-  if (!solver_stats.name.empty() && decided > 0)
-  {
-    std::ostringstream timing_oss;
-    timing_oss << "Solver: " << solver_stats.name
-               << " • Decision procedure total time: "
-               << time2string(solver_stats.total_time_ms) << "s"
-               << " • Avg: "
-               << time2string(solver_stats.total_time_ms / decided)
-               << "s/property";
-    log_result("{}", timing_oss.str());
-  }
+  print_solver_timing(solver_stats.name, solver_stats.total_time_ms, decided);
 
   // The phase that prints a k-step run's table need not be the phase that
   // stopped short, so the store carries that across phases too.

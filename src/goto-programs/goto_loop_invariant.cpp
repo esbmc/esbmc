@@ -50,6 +50,7 @@
 // ---------------------------------------------------------------------------
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
 const char *const kCbmcLoopContractProperty = "cbmc-loop-contract";
 
 /// The base case and inductive step of one invariant carry the same number,
@@ -126,12 +127,13 @@ static bool is_tool_placed_invariant(const goto_programt::instructiont &i)
 
 /// Hands \p collect each further LOOP_INVARIANT of the loop whose first one
 /// \p it is. These arise when the user writes multiple separate
-/// __ESBMC_loop_invariant() calls (issue #3936). The only instructions that
-/// may appear between consecutive same-loop invariants are compiler-generated
-/// temporaries; any real instruction means we have crossed into a different
-/// context (e.g. outer-loop body), so we stop immediately. The walk ends at the
-/// first other instruction, so it is not bounded by kMaxInvariantSearchBack:
-/// the temporaries of a branching invariant (#11033) alone can exceed it.
+/// __ESBMC_loop_invariant() calls (issue #3936), and a Houdini pool is one such
+/// contiguous run. The only instructions that may appear between consecutive
+/// same-loop invariants are compiler-generated temporaries; any real
+/// instruction means we have crossed into a different context (e.g. outer-loop
+/// body), so we stop immediately. The walk ends at the first other
+/// instruction, so it is not bounded by kMaxInvariantSearchBack: the
+/// temporaries of a branching invariant (#11033) alone can exceed it.
 template <class Collect>
 static void collect_same_loop_invariants(
   goto_programt::targett it,
@@ -145,9 +147,8 @@ static void collect_same_loop_invariants(
     scanned.insert(&*it);
     if (it->is_loop_invariant())
     {
-      const std::list<expr2tc> &extra = it->get_loop_invariants();
-      if (!extra.empty())
-        collect(extra);
+      if (!it->get_loop_invariants().empty())
+        collect(it);
       continue;
     }
     if (is_compiler_temp(it))
@@ -166,9 +167,13 @@ static void collect_same_loop_invariants(
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
 /// vector when no annotated LOOP_INVARIANT is in range.
+///
+/// @p tags, when non-null, receives each returned invariant's source marker
+/// property, positionally aligned with the result.
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
-  goto_programt::targett begin)
+  goto_programt::targett begin,
+  std::vector<std::string> *tags = nullptr)
 {
   std::vector<expr2tc> invariants;
 
@@ -180,12 +185,15 @@ static std::vector<expr2tc> extract_invariants_near(
 
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
-  auto collect = [&](const std::list<expr2tc> &lst) {
+  auto collect = [&](goto_programt::const_targett src) {
+    const std::list<expr2tc> &lst = src->get_loop_invariants();
     auto jt = lst.begin();
     expr2tc combined = *jt;
     for (++jt; jt != lst.end(); ++jt)
       combined = and2tc(combined, *jt);
     invariants.push_back(combined);
+    if (tags)
+      tags->push_back(src->location.property().as_string());
   };
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
@@ -235,7 +243,7 @@ static std::vector<expr2tc> extract_invariants_near(
       return invariants;
     }
 
-    collect(inv_list);
+    collect(it);
     // Phase 2: the loop's further invariants.
     collect_same_loop_invariants(it, begin, collect);
     break; // done: found the invariant group for this loop
@@ -452,8 +460,21 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
+  active_invariant_tags.clear();
   return extract_invariants_near(
-    loop.get_original_loop_head(), goto_function.body.instructions.begin());
+    loop.get_original_loop_head(),
+    goto_function.body.instructions.begin(),
+    &active_invariant_tags);
+}
+
+std::string
+goto_loop_invariantt::invariant_claim_comment(const char *base, size_t i) const
+{
+  if (
+    i < active_invariant_tags.size() &&
+    active_invariant_tags[i].rfind(kHoudiniCandidatePrefix, 0) == 0)
+    return std::string(base) + " [" + active_invariant_tags[i] + "]";
+  return base;
 }
 
 std::vector<expr2tc>
@@ -776,7 +797,7 @@ void goto_loop_invariantt::insert_assert_before_loop(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = invariants[i];
     t->location = loop_head->location;
-    t->location.comment("loop invariant base case");
+    t->location.comment(invariant_claim_comment("loop invariant base case", i));
     t->location.property("invariant-base-case");
     t->location.set(invariant_claim_key, first_claim + i);
   }
@@ -1048,7 +1069,8 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->guard = conditional_back_edge ? expr2tc(or2tc(exit_cond, invariants[i]))
                                      : invariants[i];
     t->location = loop_exit->location;
-    t->location.comment("loop invariant inductive step");
+    t->location.comment(
+      invariant_claim_comment("loop invariant inductive step", i));
     t->location.property("invariant-inductive-step");
     // The witness states the invariant once, at its own loop.
     if (loop_exit == loop.get_original_loop_exit())

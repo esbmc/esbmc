@@ -1,0 +1,5 @@
+CORE
+main.c
+--houdini-loop-invariants
+FAILED.*assertion x > 3$
+^VERIFICATION FAILED$

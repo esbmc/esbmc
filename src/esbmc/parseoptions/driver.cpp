@@ -52,6 +52,7 @@ extern "C"
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_houdini_invariants.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -175,6 +176,41 @@ static bool parallel_solving_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+/// --houdini-loop-invariants owns the outer loop too: it re-derives the
+/// program once per filtering round from a pristine copy and applies the
+/// loop-invariant schema itself. Combining it with another driver is not
+/// merely redundant -- goto_k_induction has already havoc'd the loops by the
+/// time the strategy runs, and layering the schema on that produced a
+/// *wrong* verdict: regression/k-induction/trex02_bug, a program with a real
+/// bug, reported VERIFICATION SUCCESSFUL under --k-induction
+/// --houdini-loop-invariants while reporting FAILED under either alone.
+/// The invariant-source flags are listed for a different reason: this flag
+/// supplies the invariants itself, so passing another source silently does
+/// nothing.
+static bool houdini_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("houdini-loop-invariants"))
+    return false;
+
+  for (const char *incompatible :
+       {"termination",
+        "incremental-bmc",
+        "falsification",
+        "k-induction",
+        "k-induction-parallel",
+        "loop-invariant",
+        "loop-invariant-check",
+        "synthesise-loop-invariants",
+        "incremental-context-bound"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--houdini-loop-invariants cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
 /// generate_hash needs a state_hashing_level2t, which the --schedule execution
 /// state never installs (#10296).
 static bool schedule_conflicts(const cmdlinet &cmdline)
@@ -218,6 +254,47 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
 static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
 {
   return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
+}
+
+static bool loop_invariant_conflicts(const cmdlinet &cmdline)
+{
+  // Combined mode owns the whole pipeline: process_goto_program routes
+  // --loop-invariant into goto_loop_invariant_combined, which never reaches
+  // the synthesis pass, so the flag would be a silent no-op. Combined mode
+  // also ASSUMEs the invariant at the end of the body, and assuming a guess
+  // is exactly what synthesis must never do (a wrong candidate has to fail a
+  // claim, not license one). Reject rather than wire the two together.
+  if (
+    cmdline.isset("synthesise-loop-invariants") &&
+    cmdline.isset("loop-invariant"))
+  {
+    log_error(
+      "--synthesise-loop-invariants cannot be combined with --loop-invariant; "
+      "use --loop-invariant-check, which it implies");
+    return true;
+  }
+
+  // --termination havocs every loop head k-induction-style (goto_termination),
+  // and the standalone schema has already rewritten those heads: goto_loop_
+  // invariant uses insert_swap, which leaves the establishment ASSERT in the
+  // head's slot. Composing the two is meaningless -- a loop the schema has cut
+  // no longer has the iteration behaviour --termination asks about.
+  //
+  // Combined mode is exempt, and so is --validate-correctness-witness, which
+  // routes to it: goto_loop_invariant_combined splices its verification branch
+  // *before* the head with destructive_insert, so the head is still the guard
+  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
+  // a witness-injected loop invariant, where the ranking check does not
+  // short-circuit: the run completes.
+  for (const char *mode :
+       {"synthesise-loop-invariants", "loop-invariant-check"})
+    if (cmdline.isset(mode) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", mode);
+      return true;
+    }
+
+  return houdini_conflicts(cmdline);
 }
 
 /// --llm-invariants runs the --synthesise-loop-invariants pipeline with a
@@ -329,42 +406,6 @@ static bool incompatible_flags(const cmdlinet &cmdline)
         return true;
       }
 
-  // Combined mode owns the whole pipeline: process_goto_program routes
-  // --loop-invariant into goto_loop_invariant_combined, which never reaches
-  // the synthesis pass, so the flag would be a silent no-op. Combined mode
-  // also ASSUMEs the invariant at the end of the body, and assuming a guess
-  // is exactly what synthesis must never do (a wrong candidate has to fail a
-  // claim, not license one). Reject rather than wire the two together.
-  if (
-    cmdline.isset("synthesise-loop-invariants") &&
-    cmdline.isset("loop-invariant"))
-  {
-    log_error(
-      "--synthesise-loop-invariants cannot be combined with --loop-invariant; "
-      "use --loop-invariant-check, which it implies");
-    return true;
-  }
-
-  // --termination havocs every loop head k-induction-style (goto_termination),
-  // and the standalone schema has already rewritten those heads: goto_loop_
-  // invariant uses insert_swap, which leaves the establishment ASSERT in the
-  // head's slot. Composing the two is meaningless -- a loop the schema has cut
-  // no longer has the iteration behaviour --termination asks about.
-  //
-  // Combined mode is exempt, and so is --validate-correctness-witness, which
-  // routes to it: goto_loop_invariant_combined splices its verification branch
-  // *before* the head with destructive_insert, so the head is still the guard
-  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
-  // a witness-injected loop invariant, where the ranking check does not
-  // short-circuit: the run completes.
-  for (const char *mode :
-       {"synthesise-loop-invariants", "loop-invariant-check"})
-    if (cmdline.isset(mode) && cmdline.isset("termination"))
-    {
-      log_error("--{} cannot be combined with --termination", mode);
-      return true;
-    }
-
   if (ts_strategy_conflicts(cmdline))
     return true;
 
@@ -372,6 +413,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
     return true;
 
   if (parallel_solving_conflicts(cmdline))
+    return true;
+
+  if (loop_invariant_conflicts(cmdline))
     return true;
 
   if (concurrency_mode_conflicts(cmdline))
@@ -577,6 +621,12 @@ int esbmc_parseoptionst::run_chosen_strategy(
 
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
+
+  // Houdini owns the loop-invariant schema itself: it re-derives the program
+  // once per round with a different candidate set, so process_goto_program
+  // deliberately left the loops untouched.
+  if (cmdline.isset("houdini-loop-invariants"))
+    return do_houdini_strategy(options, goto_functions);
 
   if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
