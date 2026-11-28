@@ -511,6 +511,18 @@ def partial_order_command_line(command_line, strat):
           + "--partial-order ")
 
 
+def verify_partial_order(command_line, strat, prop, benchmark, witness_path):
+  """The verdict under --partial-order, or None when the task is not a threaded
+  one it covers, is a witness validation, or ESBMC rejects it."""
+  if (witness_path or prop not in PARTIAL_ORDER_PROPERTIES
+      or not check_if_benchmark_contains_pthread(benchmark)):
+    return None
+  output = run(partial_order_command_line(command_line, strat)).decode()
+  if PARTIAL_ORDER_REJECTED.search(output):
+    return None
+  return parse_result(output, prop)
+
+
 def python_exception_flags(prop):
   """Report only the property's own exception family. Any other uncaught
   exception ends its path unreported, as CPython stops there, and the
@@ -1135,11 +1147,10 @@ def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate
     esbmc_command_line += "--witness " + witness_path + " "
 
   started = time.monotonic()
-  if (partial_order and not witness_path and prop in PARTIAL_ORDER_PROPERTIES
-      and check_if_benchmark_contains_pthread(benchmark)):
-    output = run(partial_order_command_line(esbmc_command_line, strat)).decode()
-    if not PARTIAL_ORDER_REJECTED.search(output):
-      return parse_result(output, prop)
+  result = partial_order and verify_partial_order(esbmc_command_line, strat, prop, benchmark,
+                                                  witness_path)
+  if result:
+    return result
   if prop == Property.overflow and "--k-induction " in esbmc_command_line:
     # The inductive step proves most no-overflow loops in seconds, but on
     # nonlinear arithmetic its solve can stall, and on goto-heavy code it can

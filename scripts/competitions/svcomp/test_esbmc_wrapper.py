@@ -1575,6 +1575,25 @@ class PartialOrderRejectionTest(unittest.TestCase):
             self.assertIsNone(wrapper.PARTIAL_ORDER_REJECTED.search(output))
 
 
+class PartialOrderScopeTest(unittest.TestCase):
+    """A task --partial-order does not cover goes to the default command."""
+
+    def test_uncovered_tasks_return_none(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { pthread_create(&t, 0, f, 0); }\n")
+            f.flush()
+            threaded = f.name
+            self.assertIsNone(wrapper.verify_partial_order("", "incr", wrapper.Property.reach,
+                                                           threaded, "witness.yml"))
+            self.assertIsNone(wrapper.verify_partial_order("", "incr", wrapper.Property.memory,
+                                                           threaded, None))
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { return 0; }\n")
+            f.flush()
+            self.assertIsNone(wrapper.verify_partial_order("", "incr", wrapper.Property.reach,
+                                                           f.name, None))
+
+
 class PointerArithCheckTest(unittest.TestCase):
     """Forming an out-of-range &a[i] dereferences nothing, so memsafety runs
     without the claim that reports it (#10787)."""
