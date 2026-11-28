@@ -2480,8 +2480,12 @@ regression/esbmc-unix/partial_order_incremental_join_fail
 regression/esbmc-unix/partial_order_loop_guard
 regression/esbmc-unix/partial_order_loop_guard_fail
 regression/esbmc-unix/partial_order_reject_interval_assert
+regression/esbmc-unix/partial_order_smt_symex
+regression/esbmc-unix/partial_order_smt_symex_fail
 regression/esbmc-unix/partial_order_sv_comp
 regression/esbmc-unix/partial_order_sv_comp_fail
+regression/esbmc-unix/partial_order_sv_comp_guard
+regression/esbmc-unix/partial_order_sv_comp_guard_fail
 regression/esbmc-unix/pthread_once
 regression/esbmc-unix/pthread_once_norace
 regression/esbmc-unix/pthread_once_race_fail

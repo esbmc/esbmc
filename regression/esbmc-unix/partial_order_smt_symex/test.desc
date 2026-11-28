@@ -1,0 +1,4 @@
+CORE
+main.c
+--partial-order --smt-symex-guard --smt-symex-assert --smt-symex-assume --smt-thread-guard
+^VERIFICATION SUCCESSFUL$

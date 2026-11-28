@@ -343,6 +343,13 @@ to the default command when ESBMC rejects the task; `--sv-comp` no longer adds
 falsification rounds under `--partial-order` (`partial_order_sv_comp*`). Two
 ConcurrencySafety run definitions pass it, for the benchexec run.
 
+That run's first attempt gave 689 wrong `false` verdicts, all from
+`--smt-symex-guard`, which `--sv-comp` turns on. It and the other
+`--smt-symex-*` flags ask the solver during symex, where threads run one after
+another, so the answers hold for that order only and pruned feasible
+interleavings. `--partial-order` now turns all four off
+(`partial_order_smt_symex*`, `partial_order_sv_comp_guard*`).
+
 A halt hid violations. Once any thread halted, a join on a thread that never
 halts was taken never to return, since the disjunction of no halts is true,
 and the joining thread's later claims held. So main's `reach_error()`, which
