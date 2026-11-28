@@ -20,7 +20,7 @@ Bars, from `python3 scripts/irep2/bars.py` (B-1 as matching lines, B-2 refined):
 | phase | state | where |
 |---|---|---|
 | 0 — Option F spike | no-go for C/C++ (§36); Solidity's `sol_class` dropped (§37). What landed instead is an unreflected `irep_idt` field: `cpp_type` on the bitvector and float type kinds (§80), `cformat` on the constant kinds (#7864) | §36, §37, §80 |
-| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. §31's five origin sites are settled (§84–§86); deleting the fallback still needs a Solidity decline census over its remaining guards | §29–§31, §84–§86 |
+| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. §31's five origin sites are settled (§84–§86); the remaining guards are censused over Solidity and the C/C++ suites: none reached (§87); deleting the fallback needs each guard argued unreachable or made an abort | §29–§31, §84–§87 |
 | 2 — W3 removal | struck (§37.3). B-4 is still not met: `cpp_expr2string.cpp`, `goto2c/expr2c.cpp`, `c_expr2string.cpp` and `clang_cpp_exception_id.cpp` read the spelling off legacy nodes | §33.4, §37 |
 | 3 / 9 — Python | the census recorded 5 077 of 5 078 agreeing, but on an asserting build five CORE tests abort under the flag (`precedence2`, `github_3866{,_fail}`, `return13-fail`, `missing-return14_fail`). Those, an SV-COMP run and the two-solver gate stand before the default can flip. `__ESBMC_list_eq` still unwinds without bound. The converter is largely untouched | `scope-python-irep2.md`, `scope-relational-float-reconciliation.md`, `scope-list-eq-unbounded-unwinding.md` |
 | 4 — shared kit | done | §38 |
@@ -4784,3 +4784,37 @@ Phase 1's origin sites from §31 are all settled. The fallback itself is still t
 `do`/`while` and `switch` body guards (an empty body, an unbalanced destructor stack), the
 unsupported-kind default, and `--no-irep2-native-body`. Next comes the Solidity decline census over
 those, then the C-Dead case for deleting `goto_convert_rec`'s whole-body call.
+
+## 87. The remaining fallback guards, censused over Solidity and the C/C++ suites (2026-11-28)
+
+§86 left the `do`/`while` and `switch` body guards, the unsupported-kind default and
+`--no-irep2-native-body` as the fallback's remaining decline sites. A temporary `fprintf` marker
+on each of them, plus the three per-statement delegations (`if`, `while`, `for`) and the whole-body
+fallback in `convert_function`, counted how many tests reach each under `--goto-functions-only`
+with the test's own flags. The markers were not committed.
+
+| suite | tests | do-while guard | switch guard | unsupported-kind default | whole-body fallback |
+|---|---:|---:|---:|---:|---:|
+| `esbmc-solidity` (`.solast` input, no `solc` needed) | 547 | 0 | 0 | 0 | 0 |
+| `esbmc` | 3 868 | 0 | 0 | 0 | 3 |
+| `cbmc` | 268 | 0 | 0 | 0 | 0 |
+| `esbmc-cpp11`, `-cpp14`, `-cpp17`, `-cpp20`, `-cpp23`, `cstd` | 173 | 0 | 0 | 0 | 0 |
+
+The three whole-body fallbacks are `github_10168_legacy`, `github_10769_while_pure_first_legacy_fail`
+and `github_4715_irep2_native_body_optout_01`. All three pass `--no-irep2-native-body`, so they
+take the fallback by request, not by decline. The Solidity suite never reaches any guard, which is
+the census §84 and §86 asked for. Solidity does reach the delegation arms: 532 of 547 tests run
+the `if` and `while` delegations in every run (the same 4 and 3 in each, so a shared builtin
+function), and 34 `esbmc` runs reach the `for` delegation. A delegation hands one statement to the
+legacy `convert` and then continues natively, so it is not a decline and does not reach the
+whole-body fallback.
+
+Not covered: `jimple` (the build here has no JDK), the 9 929 `python` tests (a run capped at 560 s
+did not finish and its count is not usable, so §86's first 3 023 stand as the only Python
+measurement), and the other `esbmc-*` and `cuda`/`cheri` suites. A zero here says no corpus test reaches a
+guard. It does not show that no input can, so converting a guard to an abort would still need the
+legacy-equivalence argument §84 made for break and continue.
+
+No source change accompanies this section and no test can pin a zero, so there is no mutation
+check. Next in Phase 1 is the C-Dead case: either argue each of the three guards unreachable or
+make each abort as in §84, then delete `goto_convert_rec`'s whole-body call.
