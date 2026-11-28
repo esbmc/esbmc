@@ -2470,6 +2470,8 @@ regression/esbmc-unix/partial_order_incremental_bmc
 regression/esbmc-unix/partial_order_incremental_bmc_fail
 regression/esbmc-unix/partial_order_incremental_join
 regression/esbmc-unix/partial_order_incremental_join_fail
+regression/esbmc-unix/partial_order_sv_comp
+regression/esbmc-unix/partial_order_sv_comp_fail
 regression/esbmc-unix/pthread_once
 regression/esbmc-unix/pthread_once_norace
 regression/esbmc-unix/pthread_once_race_fail

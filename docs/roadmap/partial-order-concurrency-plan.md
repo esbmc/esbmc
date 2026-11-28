@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-27):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
+**Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -16,7 +16,7 @@ write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs. `--incremental-bmc` and `--falsification` raise its
-unwinding bound. The effort figures are estimates.
+unwinding bound, and the SV-COMP wrapper runs it on request. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -24,7 +24,7 @@ unwinding bound. The effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-27.
+**Last updated:** 2026-11-28.
 
 ## 1. Goal
 
@@ -286,8 +286,13 @@ program once no thread's loop passes the bound (`partial_order_incremental_bmc*`
 `partial_order_falsification_fail`). These strategies do not propagate
 arrays, so a join on `id[j]` reads the ids' array in its event's guard; the
 slicer now counts that read, where it had dropped the stores to the array
-(`partial_order_incremental_join*`). `--k-induction` is still rejected; the
-SV-COMP wrapper's concurrency path is the next step towards a benchexec run.
+(`partial_order_incremental_join*`). `--k-induction` is still rejected.
+
+The SV-COMP wrapper's `--partial-order` flag runs a threaded `unreach-call`
+or `no-data-race` task as `--partial-order --incremental-bmc`, and falls back
+to the default command when ESBMC rejects the task; `--sv-comp` no longer adds
+falsification rounds under `--partial-order` (`partial_order_sv_comp*`). Two
+ConcurrencySafety run definitions pass it, for the benchexec run.
 
 ## 5. Tests
 
