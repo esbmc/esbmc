@@ -925,11 +925,12 @@ void goto_symext::run_intrinsic(
     ex_state.get_active_state().level2.rename(v2);
 
     // V1 and V2 should have the same type
-    assert(
-      v1->type == v2->type &&
-      v1->expr_id == expr2t::expr_ids::constant_vector_id);
-    auto v1_size = (long int)to_constant_vector2t(v1).datatype_members.size();
+    assert(v1->type == v2->type);
+    const vector_type2t &vec_type = to_vector_type(v1->type);
+    auto v1_size = to_constant_int2t(vec_type.array_size).value.to_int64();
 
+    // Index the lanes rather than read them off a constant_vector2t: a
+    // bit-cast or lane-assigned vector operand is not one.
     std::vector<expr2tc> members;
     for (long unsigned int i = 2; i < func_call.operands.size(); i++)
     {
@@ -937,15 +938,13 @@ void goto_symext::run_intrinsic(
       ex_state.get_active_state().level2.rename(e);
 
       auto index = to_constant_int2t(e).value.to_int64();
+      // TODO: nondet_value
       if (index == -1)
-      {
-        // TODO: nondet_value
-        members.push_back(to_constant_vector2t(v1).datatype_members[0]);
-      }
-      auto vec =
-        index < v1_size ? to_constant_vector2t(v1) : to_constant_vector2t(v2);
-      index = index % v1_size;
-      members.push_back(vec.datatype_members[index]);
+        index = 0;
+      members.push_back(index2tc(
+        vec_type.subtype,
+        index < v1_size ? v1 : v2,
+        gen_ulong(index % v1_size)));
     }
     expr2tc result =
       constant_vector2tc(func_call.ret->type, std::move(members));
