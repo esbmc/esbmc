@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^  FAILED +\[t2\.assertion\.[0-9]+\] .*assertion v == 0$
+^VERIFICATION FAILED$
