@@ -2507,6 +2507,29 @@ void bmct::report_result(smt_resultt &res)
   }
 }
 
+void bmct::write_pending_sarif()
+{
+  if (
+    dead_store_sarif_written ||
+    (dead_store_advisories.empty() && sarif_violation_list.empty()) ||
+    options.get_option("sarif-output").empty())
+    return;
+  sarif_violation_report(options, sarif_violation_list, dead_store_advisories);
+  dead_store_sarif_written = true;
+}
+
+void bmct::record_sarif_violations(const goto_tracet &trace, bool is_goto_cov)
+{
+  if (is_goto_cov || options.get_option("sarif-output").empty())
+    return;
+  std::lock_guard lock(sarif_violation_mutex);
+  for (auto &v : sarif_violations(trace))
+    if (
+      std::find(sarif_violation_list.begin(), sarif_violation_list.end(), v) ==
+      sarif_violation_list.end())
+      sarif_violation_list.push_back(std::move(v));
+}
+
 smt_resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
@@ -2571,15 +2594,7 @@ smt_resultt bmct::start_bmc()
   // emission. Emit an advisory-only SARIF document here if none was written
   // with a trace, so the advisory is not silently dropped (the textual
   // advisory prints unconditionally in the driver).
-  if (
-    !dead_store_sarif_written &&
-    (!dead_store_advisories.empty() || !sarif_violation_list.empty()) &&
-    !options.get_option("sarif-output").empty())
-  {
-    sarif_violation_report(
-      options, sarif_violation_list, dead_store_advisories);
-    dead_store_sarif_written = true;
-  }
+  write_pending_sarif();
 
   if (symex)
   {
@@ -4073,8 +4088,6 @@ smt_resultt bmct::multi_property_check(
         !is_goto_cov && options.get_bool_option("generate-html-report");
       const bool want_json =
         !is_goto_cov && options.get_bool_option("generate-json-report");
-      const bool want_sarif =
-        !is_goto_cov && !options.get_option("sarif-output").empty();
       const bool want_pytest =
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
@@ -4149,16 +4162,7 @@ smt_resultt bmct::multi_property_check(
           generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
           generate_json_report(witness_id, ns, w.trace);
-        if (want_sarif)
-        {
-          std::lock_guard lock(sarif_violation_mutex);
-          for (auto &v : sarif_violations(w.trace))
-            if (
-              std::find(
-                sarif_violation_list.begin(), sarif_violation_list.end(), v) ==
-              sarif_violation_list.end())
-              sarif_violation_list.push_back(std::move(v));
-        }
+        record_sarif_violations(w.trace, is_goto_cov);
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)

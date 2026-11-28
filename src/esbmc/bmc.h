@@ -282,6 +282,10 @@ private:
 
   /// Print goto_functionst::reported_verdicts in a section of their own.
   void report_reported_properties() const;
+  // Writes the SARIF document start_bmc() owes when no trace path wrote one.
+  void write_pending_sarif();
+  // Adds a --multi-property witness's violations to the SARIF document.
+  void record_sarif_violations(const goto_tracet &trace, bool is_goto_cov);
 
   /// Whether the run left paths unexplored: it stopped before deciding every
   /// claim, cut a loop at its bound, or failed or never decided an unwinding
