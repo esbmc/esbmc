@@ -4,6 +4,7 @@
 #include <util/message/message.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 
@@ -98,11 +99,43 @@ bool is_mutex_type(const type2tc &t)
   return name.find("pthread_mutex_t") != std::string::npos;
 }
 
-bool is_null(expr2tc e)
+expr2tc strip_casts(expr2tc e)
 {
   while (is_typecast2t(e))
     e = to_typecast2t(e).from;
-  return is_constant(e) && !is_constant_string2t(e);
+  return e;
+}
+
+bool is_null(const expr2tc &e)
+{
+  const expr2tc v = strip_casts(e);
+  return is_constant(v) && !is_constant_string2t(v);
+}
+
+bool is_shared_pointer(const namespacet &ns, const expr2tc &e)
+{
+  return is_symbol2t(e) && is_pointer_type(e->type) &&
+         is_partial_order_global(ns, to_symbol2t(e).thename);
+}
+
+/// Calls \p f on each assignment to a shared global pointer, initialisers
+/// included, with the instruction's location.
+template <typename F>
+void each_pointer_assignment(
+  const goto_functionst &goto_functions,
+  const namespacet &ns,
+  F f)
+{
+  for (const auto &[name, fn] : goto_functions.function_map)
+    for (const auto &instruction : fn.body.instructions)
+    {
+      if (!instruction.is_assign())
+        continue;
+      const code_assign2t &assign = to_code_assign2t(instruction.code);
+      const expr2tc target = strip_casts(assign.target);
+      if (is_shared_pointer(ns, target))
+        f(to_symbol2t(target).thename, assign.source, instruction.location);
+    }
 }
 
 class scope_checkt
@@ -119,6 +152,7 @@ public:
   bool check(const goto_functionst &goto_functions)
   {
     functions = &goto_functions;
+    find_foreign_pointer_values(goto_functions);
     for (const auto &[name, fn] : goto_functions.function_map)
     {
       if (!is_user_function(name.as_string(), fn))
@@ -140,6 +174,9 @@ private:
   const bool deadlocks;
   const locationt *where = nullptr;
   const goto_functionst *functions = nullptr;
+  /// The first assignment of each shared global pointer whose value is not
+  /// a global's address or null.
+  std::map<irep_idt, const locationt *> foreign_pointer_values;
 
   static bool
   is_user_function(const std::string &name, const goto_functiont &fn)
@@ -151,12 +188,12 @@ private:
              fn.body.instructions.front().location.get_file().as_string());
   }
 
-  bool reject(const std::string &what) const
+  bool reject(const std::string &what, const locationt *at = nullptr) const
   {
     log_error(
       "--partial-order does not support {} yet, at {}",
       what,
-      where->as_string());
+      (at ? at : where)->as_string());
     return false;
   }
 
@@ -283,6 +320,10 @@ private:
       is_mutex_type(to_address_of2t(e).ptr_obj->type))
       return true;
 
+    // A write through it would escape the pointer's value set.
+    if (is_address_of2t(e) && is_shared_pointer(ns, root_of(e)))
+      return reject("taking the address of a global pointer");
+
     if (is_symbol2t(e) && !check_symbol(e))
       return false;
 
@@ -302,9 +343,14 @@ private:
 
     if (!is_shared(sym))
       return true;
-    if (!is_partial_order_type(e->type))
+    if (!is_partial_order_global_type(e->type))
       return reject(
         "a global that is not a scalar or an array or struct of them");
+    if (
+      auto it = foreign_pointer_values.find(sym.thename);
+      it != foreign_pointer_values.end())
+      return reject(
+        "a global pointer assigned other than a global's address", it->second);
     // An array or a struct is one object, so accesses to distinct elements or
     // fields would race.
     if (races && (is_array_type(e->type) || is_struct_type(e->type)))
@@ -317,15 +363,35 @@ private:
     return is_partial_order_global(ns, sym.thename);
   }
 
+  static expr2tc root_of(const expr2tc &address)
+  {
+    expr2tc obj = to_address_of2t(address).ptr_obj;
+    while (is_index2t(obj) || is_member2t(obj))
+      obj = is_index2t(obj) ? to_index2t(obj).source_value
+                            : to_member2t(obj).source_value;
+    return obj;
+  }
+
   bool is_shared_address(const expr2tc &e) const
   {
     if (!is_address_of2t(e))
       return false;
-    expr2tc obj = to_address_of2t(e).ptr_obj;
-    while (is_index2t(obj) || is_member2t(obj))
-      obj = is_index2t(obj) ? to_index2t(obj).source_value
-                            : to_member2t(obj).source_value;
+    const expr2tc obj = root_of(e);
     return is_symbol2t(obj) && is_shared(to_symbol2t(obj));
+  }
+
+  /// A read of a global pointer may see any thread's write, so symex takes
+  /// its value set from every value it is assigned, which must name globals.
+  void find_foreign_pointer_values(const goto_functionst &goto_functions)
+  {
+    each_pointer_assignment(
+      goto_functions,
+      ns,
+      [this](const irep_idt &name, const expr2tc &value, const locationt &loc) {
+        const expr2tc v = strip_casts(value);
+        if (!is_null(v) && !is_shared_address(v))
+          foreign_pointer_values.emplace(name, &loc);
+      });
   }
 
   bool reads_shared(const expr2tc &e) const
@@ -357,6 +423,25 @@ bool is_partial_order_type(const type2tc &t)
   }
   return is_bv_type(t) || is_bool_type(t) || is_fixedbv_type(t) ||
          is_floatbv_type(t);
+}
+
+bool is_partial_order_global_type(const type2tc &t)
+{
+  return is_pointer_type(t) || is_partial_order_type(t);
+}
+
+std::map<irep_idt, std::vector<expr2tc>> partial_order_pointer_values(
+  const goto_functionst &goto_functions,
+  const namespacet &ns)
+{
+  std::map<irep_idt, std::vector<expr2tc>> values;
+  each_pointer_assignment(
+    goto_functions,
+    ns,
+    [&values](const irep_idt &name, const expr2tc &value, const locationt &) {
+      values[name].push_back(value);
+    });
+  return values;
 }
 
 bool is_partial_order_global(const namespacet &ns, const irep_idt &name)

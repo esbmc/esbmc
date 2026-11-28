@@ -3,7 +3,8 @@
 **Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars, and
-arrays and structs of them, including through pointers, with threads created
+arrays and structs of them, including through pointers and through global
+pointers whose values are globals' addresses, with threads created
 in loops, mutexes, condition variables, `pthread_exit` and the scheduler
 intrinsics phase 1 lists, without assumptions, and checks data races on
 scalars and deadlocks on mutexes and joins. Its counterexamples list steps
@@ -362,11 +363,23 @@ default.
 
 A global struct whose fields are scalars, arrays or structs of them is one
 object, as an array is: a field read reads the struct, and a field write,
-directly or through a pointer, updates it. How many of the 91 SV-COMP tasks
-the scope check rejected for such a global are now in scope is not measured
-yet. `pthread_` types stay out, since LOCK and UNLOCK events order them,
-and `--data-races-check` rejects a global struct as it does an array
-(`partial_order_struct*`).
+directly or through a pointer, updates it. `pthread_` types stay out, since
+LOCK and UNLOCK events order them, and `--data-races-check` rejects a global
+struct as it does an array (`partial_order_struct*`). On the 473
+`unreach-call` tasks of the 26 `c/pthread*` directories of sv-benchmarks at
+`67f8e5a3`, this moved no task into scope: the scope check rejects 136, 86
+of them for a non-scalar global, and 58 of those, all in `pthread-wmm`, for
+an `int *` global such as `x$read_delayed_var`.
+
+A global pointer is now an event object too, if every value assigned to it,
+its initialiser included, is a global's address or null. A read may see any
+thread's write, so its value set becomes all of those values; taking the
+pointer's address is rejected (`partial_order_global_pointer*`,
+`partial_order_reject_pointer_*`). The 58 tasks enter scope and the scope
+check rejects 78. On them (Z3 4.8.12, 30 s, 4 jobs, 2026-11-28; all expect
+FAILED) `--partial-order` decides 29 (median 16.1 s on those both decide),
+times out on 28 and runs out of memory on `safe008_power.opt`; the default
+decides 45 (median 0.3 s). Both decide 26 and agree on all of them.
 
 `pthread_create` passes a thread argument other than NULL if it is a value,
 which the thread receives as it was at the spawn, or a global's address, which
