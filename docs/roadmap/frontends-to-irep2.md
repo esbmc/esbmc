@@ -20,7 +20,7 @@ Bars, from `python3 scripts/irep2/bars.py` (B-1 as matching lines, B-2 refined):
 | phase | state | where |
 |---|---|---|
 | 0 — Option F spike | no-go for C/C++ (§36); Solidity's `sol_class` dropped (§37). What landed instead is an unreflected `irep_idt` field: `cpp_type` on the bitvector and float type kinds (§80), `cformat` on the constant kinds (#7864) | §36, §37, §80 |
-| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. Deleting them needs the five §31 origin sites settled and a Solidity decline census | §29–§31 |
+| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. §31's five origin sites are settled (§84–§86); deleting the fallback still needs a Solidity decline census over its remaining guards | §29–§31, §84–§86 |
 | 2 — W3 removal | struck (§37.3). B-4 is still not met: `cpp_expr2string.cpp`, `goto2c/expr2c.cpp`, `c_expr2string.cpp` and `clang_cpp_exception_id.cpp` read the spelling off legacy nodes | §33.4, §37 |
 | 3 / 9 — Python | the census recorded 5 077 of 5 078 agreeing, but on an asserting build five CORE tests abort under the flag (`precedence2`, `github_3866{,_fail}`, `return13-fail`, `missing-return14_fail`). Those, an SV-COMP run and the two-solver gate stand before the default can flip. `__ESBMC_list_eq` still unwinds without bound. The converter is largely untouched | `scope-python-irep2.md`, `scope-relational-float-reconciliation.md`, `scope-list-eq-unbounded-unwinding.md` |
 | 4 — shared kit | done | §38 |
@@ -4747,3 +4747,40 @@ was.
 
 Next in Phase 1 is §31.3's expression-statement code operand, the last origin site. After that
 comes the Solidity decline census over the round-trip fallback.
+
+## 86. §31.3's expression-statement code operand is delegated, not declined (2026-11-28)
+
+`convert_expression` sends a code-typed operand of any statement kind to `convert()`. The native
+`code_expression2t` arm did that only for `cpp-throw` and returned false for every other code
+statement. That `return false` sent the whole function to `goto_convert_rec` on the round-tripped
+body, where the same `convert_expression` reached the same `convert()`. The arm now delegates every
+code operand. This is the legacy behaviour, so no verdict can depend on it, and it needs neither an
+abort nor a producer survey. Origin sites: 1 -> 0. `return false` lines in `convert_native_rec`:
+8 -> 7.
+
+The two paths agree on the operand's locations. On the fallback, `restore_value_locations(body,
+locationt())` recurses into the code operand with the statement's own location, or the inherited one
+when the statement has none. The arm passes `effective_location(stmt.location, inherited)`, which is
+the same test. Both calls go through `convert_native_full_expression` and `convert_full_expression`,
+so the full-expression temporaries are destroyed the same way. The native loop and switch arms set
+the break and continue targets where the legacy ones do (§84).
+
+Measured: a temporary marker on the arm, `--goto-functions-only` with each test's flags, on 6 993
+tests: all of `esbmc-cpp` (3 386), `esbmc-solidity` (547) and `jimple` (37), and the first 3 023 of
+`python`'s 9 929 in directory order. None timed out. Every hit was `cpp-throw` (3 071 tests: 1 611 C++,
+1 460 Python), so none of these runs reaches the guard that was
+deleted, and none changes path. No censused test produces another code operand, so a regression test
+cannot tell the two binaries apart. `unit/goto-programs/native_expression_code_operand`
+hand-builds two bodies: an assignment as the operand, and a block as the operand. It requires
+`try_convert_body_native` to accept each one and to emit the same instructions as `goto_convert_rec`.
+Restoring the guard fails both cases, and dropping the `convert()` call fails the test.
+
+Not covered: the unit test's legacy side skips `restore_value_locations`, which is file-static. For an
+operand whose instructions carry value locations (a ternary), it cannot detect a location mismatch.
+The census did not cover `esbmc`, `cbmc`, the `esbmc-cpp11`..`esbmc-cpp23` suites or the rest of
+`python`.
+
+Phase 1's origin sites from §31 are all settled. The fallback itself is still there: the
+`do`/`while` and `switch` body guards (an empty body, an unbalanced destructor stack), the
+unsupported-kind default, and `--no-irep2-native-body`. Next comes the Solidity decline census over
+those, then the C-Dead case for deleting `goto_convert_rec`'s whole-body call.
