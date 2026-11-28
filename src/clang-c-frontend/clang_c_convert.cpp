@@ -4293,10 +4293,11 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   return true;
 }
 
-/// `__builtin_copysign` and the other `__builtin_` spellings of a <math.h>
-/// function have no body; the plain name has an operational model. Those
-/// that clang_c_adjust lowers by their own spelling keep it.
-bool clang_c_convertert::is_unlowered_math_builtin(
+/// `__builtin_copysign`, `__builtin_strchr` and the other `__builtin_`
+/// spellings of a <math.h> or <string.h> function have no body; the plain
+/// name has an operational model. Those that clang_c_adjust lowers by their
+/// own spelling keep it.
+bool clang_c_convertert::is_unlowered_libc_builtin(
   const std::string &name) const
 {
   llvm::StringRef lib_name(name);
@@ -4306,8 +4307,10 @@ bool clang_c_convertert::is_unlowered_math_builtin(
     return false;
 
   unsigned lib_id = ASTContext->Idents.get(lib_name).getBuiltinID();
-  return lib_id && llvm::StringRef(
-                     ASTContext->BuiltinInfo.getHeaderName(lib_id)) == "math.h";
+  if (!lib_id)
+    return false;
+  llvm::StringRef header(ASTContext->BuiltinInfo.getHeaderName(lib_id));
+  return header == "math.h" || header == "string.h";
 }
 
 void clang_c_convertert::rewrite_builtin_ref(
@@ -4331,12 +4334,19 @@ void clang_c_convertert::rewrite_builtin_ref(
   if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&d))
   {
     unsigned builtin_id = fd->getBuiltinID();
+    // A libc that defines `strchr` by calling `__builtin_strchr` must keep
+    // calling the builtin, or the rewrite turns the call into recursion.
+    llvm::StringRef plain = llvm::StringRef(name).drop_front(
+      llvm::StringRef(name).starts_with("__builtin_") ? 10 : 0);
+    bool in_own_definition =
+      current_functionDecl && current_functionDecl->getName() == plain;
     if (
-      builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
+      builtin_id && !in_own_definition &&
+      ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
       (std::find(
          builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
          builtins_to_rewrite.end() ||
-       is_unlowered_math_builtin(name)))
+       is_unlowered_libc_builtin(name)))
     {
       boost::replace_all(name, "__builtin_", "");
       boost::replace_all(id, "__builtin_", "");
