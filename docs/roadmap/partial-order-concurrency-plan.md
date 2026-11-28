@@ -3,18 +3,19 @@
 **Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars, and
-arrays and structs of them, including through pointers, with threads created in loops, mutexes,
-condition variables, `pthread_exit` and the scheduler intrinsics phase 1
-lists, without assumptions, and checks data races on scalars and deadlocks
-on mutexes and joins. Its counterexamples list steps in the order the
-solver's clocks give them, and its violation witnesses carry thread ids.
+arrays and structs of them, including through pointers, with threads created
+in loops, mutexes, condition variables, `pthread_exit` and the scheduler
+intrinsics phase 1 lists, without assumptions, and checks data races on
+scalars and deadlocks on mutexes and joins. Its counterexamples list steps
+in the order the solver's clocks give them, and its violation witnesses carry
+thread ids.
 A loop or recursion cut by `--no-unwinding-assertions` stops only its own
 thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
-assumption, `abort()` included, stops only its own thread, and a join on a
-thread that ends returns.
+assumption, `abort()` included, stops only its own thread, also from inside
+a callee, and a join on a thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
 run. Loop guards are not pruned by the interval domain, which would carry one
@@ -343,14 +344,28 @@ and the joining thread's later claims held. So main's `reach_error()`, which
 `--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
 never reported. Fixed: such a thread ends (`partial_order_halt_*`).
 
+SV-COMP subset. `partial_order_compare.py` also runs SV-COMP task
+definitions, with the phase 0 options. On the 405 `unreach-call` tasks of
+the 12 `c/pthread*` directories phase 0 used (Z3 4.13.3, 30 s, 4 jobs,
+2026-11-28), `--partial-order` gave 37 wrong verdicts, all false alarms and
+36 of them in `pthread-wmm`. `assume_abort_if_not` calls `abort()` in a
+callee, and `pop_frame` restored the caller's entry guard, which dropped
+the halt from it; a loop bound in a callee did the same. Fixed: a frame
+records the halt and returning keeps the merged guard
+(`partial_order_halt_callee*`). Now `--partial-order` decides 225 tasks
+(210 from `pthread-wmm`, median 8.6 s) and the default 199 (median 3.2 s),
+every verdict right; both decide 126 and agree on all of them. The scope
+check rejects 101, 91 for a global that is not a scalar or an array of
+scalars; 64 time out and 15 run out of memory, against 162 and 44 for the
+default.
+
 A global struct whose fields are scalars, arrays or structs of them is one
 object, as an array is: a field read reads the struct, and a field write,
-directly or through a pointer, updates it. On the SV-COMP subset the scope
-check rejected 91 tasks for a global that was neither a scalar nor an array
-of scalars; how many of them are now in scope is not measured yet.
-`pthread_` types stay out, since
-LOCK and UNLOCK events order them, and `--data-races-check` rejects a global
-struct as it does an array (`partial_order_struct*`).
+directly or through a pointer, updates it. How many of the 91 SV-COMP tasks
+the scope check rejected for such a global are now in scope is not measured
+yet. `pthread_` types stay out, since LOCK and UNLOCK events order them,
+and `--data-races-check` rejects a global struct as it does an array
+(`partial_order_struct*`).
 
 ## 5. Tests
 
