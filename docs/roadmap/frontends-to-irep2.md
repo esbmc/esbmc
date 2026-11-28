@@ -4851,3 +4851,36 @@ Not covered: the marker sat on the whole-body fallback, not on each guard, so th
 per-guard counts. Statement kinds that `convert()` sends to `OTHER` or other handlers and that
 `convert_native_rec` has no arm for are not settled, and `--goto-functions-only` exercises only
 conversion. A zero here is evidence, per §30.2, not a proof.
+
+## 89. The unsupported-kind default delegates dead, printf, free and asm (2026-11-28)
+
+§88 left the final `return false` of `convert_native_rec`, the unsupported-kind default, as the
+last guard besides the `do`/`while` and `switch` body guards. The code kinds with no native arm
+are `code_dead2t`, `code_printf2t`, `code_free2t`, `code_asm2t`, `code_cpp_delete2t`,
+`code_cpp_del_array2t`. For four of them `convert()` does nothing structural: it
+copies the statement as `DEAD` (dead) or `OTHER` (the rest). Those four now take the same
+delegation as the `cpp-throw` arm: `migrate_expr_back`, `restore_value_locations` with the
+statement's effective location, `convert(to_code(op), dest)`. That is what the whole-body
+fallback does to them, so a body that held one used to be converted by `goto_convert_rec` on the
+round-tripped body and is now converted natively with the same calls. `statement_location` gained
+the four kinds, so a `case` label on one reports its location.
+
+`code_cpp_delete2t` and `code_cpp_del_array2t` stay declined. They back-migrate to an `exprt`
+whose id is `cpp_delete` rather than `code` (`migrate.cpp`, `migrate_expr_back_rest4`), so
+`convert()` cannot take them and migrating the result forward throws `migrate expr failed`. The
+fallback has the same problem. A unit test that delegated them failed on that exception, which is
+how this was found. C++ `delete` reaches goto-convert as a `sideeffect2t`, not as a statement.
+
+No frontend builds the four delegated kinds in a function body: the clang C frontend turns
+`GCCAsmStmt`/`MSAsmStmt` into `code_skipt`, and `printf`, `free` and `dead` statements are built
+inside `goto_convert` after the body is converted (§88). Read from the code, not probed. So no
+regression test reaches the arm and §87/§88's zero counts stand. `unit/goto-programs/
+native_delegated_code` hand-builds one body per kind, between two assignments, and requires
+`try_convert_body_native` to accept it and to emit the same instructions, guards, codes and
+locations as `goto_convert_rec` on the round-tripped body. Disabling the arm fails all four cases.
+
+Not covered: the unit test's legacy side skips `restore_value_locations` (file-static), so an
+operand carrying a value location (a ternary in a `free` or `printf` argument) is not compared.
+The `do`/`while` and `switch` body guards and `--no-irep2-native-body` are unchanged, and the
+fallback is still there. Next in Phase 1: argue those two guards unreachable or make them abort,
+then delete the whole-body call.
