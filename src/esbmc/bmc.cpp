@@ -2572,11 +2572,12 @@ smt_resultt bmct::start_bmc()
   // with a trace, so the advisory is not silently dropped (the textual
   // advisory prints unconditionally in the driver).
   if (
-    !dead_store_sarif_written && !dead_store_advisories.empty() &&
+    !dead_store_sarif_written &&
+    (!dead_store_advisories.empty() || !sarif_violation_list.empty()) &&
     !options.get_option("sarif-output").empty())
   {
-    goto_tracet empty_trace;
-    sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
+    sarif_violation_report(
+      options, sarif_violation_list, dead_store_advisories);
     dead_store_sarif_written = true;
   }
 
@@ -4072,6 +4073,8 @@ smt_resultt bmct::multi_property_check(
         !is_goto_cov && options.get_bool_option("generate-html-report");
       const bool want_json =
         !is_goto_cov && options.get_bool_option("generate-json-report");
+      const bool want_sarif =
+        !is_goto_cov && !options.get_option("sarif-output").empty();
       const bool want_pytest =
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
@@ -4146,6 +4149,16 @@ smt_resultt bmct::multi_property_check(
           generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
           generate_json_report(witness_id, ns, w.trace);
+        if (want_sarif)
+        {
+          std::lock_guard lock(sarif_violation_mutex);
+          for (auto &v : sarif_violations(w.trace))
+            if (
+              std::find(
+                sarif_violation_list.begin(), sarif_violation_list.end(), v) ==
+              sarif_violation_list.end())
+              sarif_violation_list.push_back(std::move(v));
+        }
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)

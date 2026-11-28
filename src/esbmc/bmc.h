@@ -10,9 +10,11 @@
 #include <goto-symex/witness/witnesses.h>
 #include <goto-symex/testgen/pytest.h>
 #include <goto-symex/testgen/ctest.h>
+#include <goto-symex/trace/sarif.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <mutex>
 #include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
@@ -40,6 +42,10 @@ public:
   // its own document — so start_bmc() does not write a second one. There is a
   // single SARIF output path, so a second write would truncate the first.
   bool dead_store_sarif_written = false;
+  // Violations of every claim a --multi-property run solved, written to SARIF
+  // as one document by start_bmc().
+  std::vector<sarif_violation_t> sarif_violation_list;
+  std::mutex sarif_violation_mutex;
   enum ltl_res
   {
     ltl_res_good,
