@@ -1155,6 +1155,17 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
     return;
   }
 
+  // A call returning T& or T&&, or a reference member, converts to a pointer
+  // flagged as a reference. Its address is that of the referenced object,
+  // not of the call's temporary or the member (#11179). A named reference
+  // already arrives dereferenced.
+  if (is_lvalue_or_rvalue_reference(op.type()) && !op.is_dereference())
+  {
+    exprt referent = dereference_exprt(op, op.type());
+    referent.location() = op.location();
+    op.swap(referent);
+  }
+
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
