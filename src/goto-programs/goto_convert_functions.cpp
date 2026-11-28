@@ -1247,6 +1247,12 @@ bool goto_convert_functionst::convert_native_rec(
 
     const locationt &here = effective_location(dw.location, inherited);
 
+    // A body that does not convert natively, or an empty or scope-leaking one,
+    // delegates the loop to convert_dowhile, as the while arm does.
+    unsigned tmp_before = tmp_symbol.counter;
+    irep_idt ctx_before = context.mark();
+    targetst targets_before = targets;
+
     // convert_dowhile lowers the condition with remove_sideeffects before it
     // saves the break/continue targets, and makes the first instruction that
     // emits the continue target. Keep both: the lowering may allocate from the
@@ -1297,8 +1303,13 @@ bool goto_convert_functionst::convert_native_rec(
       !body_ok || tmp_w.instructions.empty() ||
       targets.destructor_stack.size() != stack_before_body.size())
     {
-      targets.destructor_stack = stack_before_body;
-      return false;
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, here);
+      convert(to_code(op), dest);
+      return true;
     }
 
     y->make_goto(tmp_w.instructions.begin());
