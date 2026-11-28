@@ -1,0 +1,6 @@
+regression/esbmc-unix/partial_order_global_pointer
+regression/esbmc-unix/partial_order_global_pointer_fail
+regression/esbmc-unix/partial_order_global_pointer_write
+regression/esbmc-unix/partial_order_global_pointer_write_fail
+regression/esbmc-unix/partial_order_reject_pointer_address
+regression/esbmc-unix/partial_order_reject_pointer_value

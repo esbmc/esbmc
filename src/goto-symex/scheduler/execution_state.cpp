@@ -1033,7 +1033,7 @@ namespace
 {
 bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
 {
-  return is_symbol2t(e) && is_partial_order_type(e->type) &&
+  return is_symbol2t(e) && is_partial_order_global_type(e->type) &&
          is_partial_order_global(ns, to_symbol2t(e).thename);
 }
 
@@ -1150,6 +1150,9 @@ void execution_statet::record_shared_reads(
   std::set<expr2tc> reads;
   std::vector<expr2tc> pointers;
   partial_order_reads(instruction, ns, reads, pointers);
+  for (const expr2tc &sym : reads)
+    if (is_pointer_type(sym->type))
+      widen_pointer_value_set(sym);
   for (const expr2tc &ptr : pointers)
   {
     const std::set<expr2tc> pointees = shared_pointees(ptr);
@@ -1162,6 +1165,31 @@ void execution_statet::record_shared_reads(
       symex_targett::SHARED_READ,
       fresh_shared_value(sym),
       cur_state->source);
+}
+
+void execution_statet::widen_pointer_value_set(const expr2tc &sym)
+{
+  if (pointer_values.empty())
+  {
+    const expr2tc choice = symbol2tc(get_bool_type(), "partial_order$choice");
+    for (const auto &[name, values] :
+         partial_order_pointer_values(goto_functions, ns))
+    {
+      expr2tc any = values.front();
+      for (size_t i = 1; i < values.size(); ++i)
+        any = if2tc(any->type, choice, typecast2tc(any->type, values[i]), any);
+      pointer_values.emplace(name, any);
+    }
+  }
+
+  // Every global is assigned at least its initialiser.
+  expr2tc lhs = sym;
+  expr2tc rhs =
+    typecast2tc(sym->type, pointer_values.at(to_symbol2t(sym).thename));
+  // Value sets hold L1 names; an L0 name would be a second pointer object.
+  cur_state->top().level1.rename(lhs);
+  cur_state->top().level1.rename(rhs);
+  cur_state->value_set.assign(lhs, rhs);
 }
 
 std::set<expr2tc> execution_statet::shared_pointees(const expr2tc &ptr)

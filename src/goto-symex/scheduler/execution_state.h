@@ -486,6 +486,10 @@ public:
     const bool hidden,
     const guard2tc &guard);
 
+  /** --partial-order: set the value set of the shared global pointer \p sym
+   *  to every value any thread assigns it, since a read may see any of them. */
+  void widen_pointer_value_set(const expr2tc &sym);
+
   /** --partial-order: the shared globals, at L0, that dereferencing \p ptr
    *  may reach. */
   std::set<expr2tc> shared_pointees(const expr2tc &ptr);
@@ -845,6 +849,9 @@ protected:
   /** --partial-order: run each thread to completion and record its shared
    *  accesses as events instead of offering context switches. */
   bool partial_order;
+  /** --partial-order: per shared global pointer, an expression whose value
+   *  set is every value assigned to it. */
+  std::map<irep_idt, expr2tc> pointer_values;
   /** --partial-order: how many locks have a choice to wait forever. */
   unsigned lock_waits = 0;
 

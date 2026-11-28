@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^  FAILED +\[main\.assertion\.[0-9]+\] .*assertion x == 5$
+^VERIFICATION FAILED$
