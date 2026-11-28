@@ -128,8 +128,9 @@ TEST_CASE(
     goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
 
   // An assert under --no-assertions emits nothing, so the loop body is empty.
-  const expr2tc body2 = code_block2tc(std::vector<expr2tc>{code_dowhile2tc(
-    gen_false_expr(), code_assert2tc(gen_true_expr(), line(3)), line(3))});
+  const expr2tc body2 = code_block2tc(
+    std::vector<expr2tc>{code_dowhile2tc(
+      gen_false_expr(), code_assert2tc(gen_true_expr(), line(3)), line(3))});
 
   // The legacy side here skips restore_value_locations, which stamps the
   // loop's back-edge GOTO from the statement location, so locations differ.
