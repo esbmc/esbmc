@@ -1171,7 +1171,15 @@ void goto_symex_statet::assignment(
   {
     // update value sets
     expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);
-    level2.get_original_name(l1_rhs);
+    // value_sett::assign reads only the arms of an if, never its condition.
+    if (is_if2t(l1_rhs))
+    {
+      if2t &ite = to_if2t(l1_rhs);
+      level2.get_original_name(ite.true_value);
+      level2.get_original_name(ite.false_value);
+    }
+    else
+      level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
   }

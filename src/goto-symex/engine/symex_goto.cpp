@@ -759,6 +759,18 @@ static bool chain_over_own_name(const expr2tc &value, const expr2tc &lhs)
          to_symbol2t(*base).level1_num == to_symbol2t(lhs).level1_num;
 }
 
+// Folds only the node, so a phi no longer re-walks the merge guard (an
+// unsimplified and-chain). A fold that needed the guard simplified first is
+// missed; the if2t left in its place is equivalent.
+static void simplify_phi_node(expr2tc &rhs)
+{
+  expr2tc folded = rhs->do_simplify();
+  if (is_nil_expr(folded))
+    return;
+  rhs = folded;
+  simplify(rhs);
+}
+
 void goto_symext::phi_function(const statet::merge_statet &merge_state)
 {
   if (merge_state.guard.is_false() && cur_state->guard.is_false())
@@ -817,6 +829,11 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     merge_state.level2.rename(merge_state_rhs);
     cur_state->level2.rename(cur_state_rhs);
 
+    // Rename operand types before the if2t exists: rename_type's non-const
+    // walk would otherwise detach every node of the (shared) guard chain.
+    cur_state->rename_type(merge_state_rhs);
+    cur_state->rename_type(cur_state_rhs);
+
     expr2tc rhs;
     if (cur_state->guard.is_false())
       rhs = merge_state_rhs;
@@ -825,7 +842,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     else
     {
       rhs = if2tc(type, tmp_guard.as_expr(), merge_state_rhs, cur_state_rhs);
-      simplify(rhs);
+      simplify_phi_node(rhs);
     }
 
     expr2tc lhs = symbol2tc(type, symbol.id);
@@ -836,7 +853,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     renaming::level2t::rename_to_record(new_lhs, variable);
 
     cur_state->rename_type(new_lhs);
-    cur_state->rename_type(rhs);
+    cur_state->rename_own_type(rhs);
     // merge_value_sets adds the merged path's entries for the object.
     const bool own_chain = art1 && !art1->split_structs.empty() &&
                            chain_over_own_name(merge_state_rhs, new_lhs);
