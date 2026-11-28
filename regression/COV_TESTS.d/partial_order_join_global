@@ -1,0 +1,4 @@
+regression/esbmc-unix/partial_order_join_global_id
+regression/esbmc-unix/partial_order_join_global_id_fail
+regression/esbmc-unix/partial_order_join_global_index
+regression/esbmc-unix/partial_order_join_global_index_fail

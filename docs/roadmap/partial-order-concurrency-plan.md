@@ -15,7 +15,8 @@ is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread, also from inside
-a callee, and a join on a thread that ends returns.
+a callee, and a join on a thread that ends returns. A join may read its
+thread id from a global.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
 run. Loop guards are not pruned by the interval domain, which would carry one
@@ -366,6 +367,12 @@ the scope check rejected for such a global are now in scope is not measured
 yet. `pthread_` types stay out, since LOCK and UNLOCK events order them,
 and `--data-races-check` rejects a global struct as it does an array
 (`partial_order_struct*`).
+
+A join whose thread id reads a global, such as `pthread_join(t[i], 0)` with
+a global loop counter `i`, is accepted: the id is symbolic, and the join
+waits, under each value it may take, for the thread with that id
+(`partial_order_join_global*`). `pthread_create` into a global is still
+rejected.
 
 ## 5. Tests
 

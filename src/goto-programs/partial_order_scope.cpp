@@ -244,11 +244,7 @@ private:
       return reject("a thread argument other than NULL");
     if (join && !is_null(call.operands.at(1)))
       return reject("a join result pointer other than NULL");
-    // Joins are ordered by a thread id known during symex, and a global's
-    // value is chosen by the solver.
-    if (
-      (create && is_shared_address(call.operands.at(0))) ||
-      (join && reads_shared(call.operands.at(0))))
+    if (create && is_shared_address(call.operands.at(0)))
       return reject("a thread id stored in a global");
     return true;
   }
@@ -307,16 +303,6 @@ private:
       obj = is_index2t(obj) ? to_index2t(obj).source_value
                             : to_member2t(obj).source_value;
     return is_symbol2t(obj) && is_shared(to_symbol2t(obj));
-  }
-
-  bool reads_shared(const expr2tc &e) const
-  {
-    if (is_symbol2t(e) && is_shared(to_symbol2t(e)))
-      return true;
-    bool found = false;
-    e->foreach_operand(
-      [&](const expr2tc &op) { found = found || reads_shared(op); });
-    return found;
   }
 };
 } // namespace
