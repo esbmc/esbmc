@@ -4354,10 +4354,12 @@ void clang_c_convertert::rewrite_builtin_ref(
       boost::replace_all(id, "__builtin_", "");
     }
     // arm_neon.h's contiguous and interleaved loads and stores, lane gets and
-    // sets, min/max and bitwise selects, modelled in the C library's neon.c.
+    // sets, min/max, bitwise selects, widening moves, shifts and multiplies
+    // and extracts, modelled in the C library's neon.c.
     static const llvm::Regex neon_modelled(
       "^__builtin_neon_v((ld|st)(1q?(_x[234])?|[234]q?)_v|"
-      "(get|set)q?_lane_(i8|i16|i32|i64|f32|f64)|(max|min|bsl)q?_v)$");
+      "(get|set)q?_lane_(i8|i16|i32|i64|f32|f64)|(max|min|bsl|ext)q?_v|"
+      "mull_v|movl_v|shll_n_v)$");
     if (builtin_id && neon_modelled.match(name))
     {
       boost::replace_all(name, "__builtin_neon_", "__ESBMC_neon_");

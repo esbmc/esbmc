@@ -1,21 +1,26 @@
-/* Operational models of clang's AArch64 NEON builtins: loads and stores, lane
- * gets and sets, min/max and bitwise select.
+/* Operational models of clang's AArch64 NEON builtins:
+ * - loads and stores: vld1-4 and vst1-4, with the vld1/vst1 _x2-_x4 forms;
+ * - lane gets and sets: vget(q)_lane and vset(q)_lane;
+ * - min/max and bitwise select: vmax(q), vmin(q) and vbsl(q);
+ * - widening: vmull, vmovl and vshll_n, which vmlal, vmlsl, the _high forms
+ *   and vmovl_high are written around;
+ * - extracts: vext(q).
  *
  * arm_neon.h lowers vld1q_u8, vst2_f32 and the rest to type-generic
  * __builtin_neon_* calls whose last argument is clang's NeonTypeFlags code:
  * bits 0-3 the element type, 0x10 unsigned, 0x20 a 128-bit (q) vector. The
  * frontend renames those calls to the __ESBMC_neon_* models below.
  *
- * Memory is accessed one lane at a time with the lane's own type, so memory
- * safety is checked per element as for memcpy, and a float lane is copied as a
- * float rather than byte by byte. LD1-4 and ST1-4 need no alignment, so a lane
- * at a misaligned offset in a byte buffer or another unpacked integer object
- * is moved as a packed one-member struct, whose access skips the alignment
- * check but keeps the bounds checks. A packed object still reports "Incorrect
- * alignment", and a misaligned float lane in a floating-point array reports
- * "Object accessed with incompatible base type" (see #11135). Registers are
- * accessed as whole vectors of that type. The moves are unrolled, not looped,
- * so they need no --unwind. */
+ * For loads and stores, memory is accessed one lane at a time with the lane's
+ * own type, so memory safety is checked per element as for memcpy, and a float
+ * lane is copied as a float rather than byte by byte. LD1-4 and ST1-4 need no
+ * alignment, so a lane at a misaligned offset in a byte buffer or another
+ * unpacked integer object is moved as a packed one-member struct, whose access
+ * skips the alignment check but keeps the bounds checks. A packed object still
+ * reports "Incorrect alignment", and a misaligned float lane in a
+ * floating-point array reports "Object accessed with incompatible base type"
+ * (see #11135). Registers are accessed as whole vectors of that type. The moves
+ * are unrolled, not looped, so they need no --unwind. */
 
 #include <stdint.h>
 
@@ -395,3 +400,155 @@ __esbmc_neon_q __ESBMC_neon_vbslq_v(
 __ESBMC_HIDE:;
   return (m & a) | (~m & b);
 }
+
+/* Carry-less product of two 8-bit polynomials, as PMULL computes it. */
+uint16_t __ESBMC_neon_pmul8(uint8_t x, uint8_t y)
+{
+__ESBMC_HIDE:;
+  uint16_t p = 0;
+#define __ESBMC_NEON_PMUL_BIT(k)                                               \
+  if (y & (1 << (k)))                                                          \
+    p ^= (uint16_t)x << (k);
+  __ESBMC_NEON_REP4(__ESBMC_NEON_PMUL_BIT, 0)
+  __ESBMC_NEON_REP4(__ESBMC_NEON_PMUL_BIT, 4)
+#undef __ESBMC_NEON_PMUL_BIT
+  return p;
+}
+
+/* Lane j of the Q result is lane j of the D vector x widened and shifted
+ * left, or multiplied by lane j of y, in the wide type, which cannot
+ * overflow. */
+#define __ESBMC_NEON_WIDEN_LANE(j)                                             \
+  if ((j) < lanes)                                                             \
+    z[j] = poly  ? __ESBMC_neon_pmul8(x[j], y[j])                              \
+           : mul ? (WT)x[j] * (WT)y[j]                                         \
+                 : (WT)x[j] * ((WT)1 << shift);
+
+#define __ESBMC_NEON_WIDEN(N, W)                                               \
+  {                                                                            \
+    typedef N VN __attribute__((vector_size(8)));                              \
+    typedef W WT;                                                              \
+    typedef W VW __attribute__((vector_size(16)));                             \
+    int lanes = 8 / sizeof(N);                                                 \
+    VN x = __builtin_bit_cast(VN, *(__esbmc_neon_d *)a);                       \
+    VN y = __builtin_bit_cast(VN, *(__esbmc_neon_d *)b);                       \
+    VW z;                                                                      \
+    __ESBMC_NEON_REP4(__ESBMC_NEON_WIDEN_LANE, 0)                              \
+    __ESBMC_NEON_REP4(__ESBMC_NEON_WIDEN_LANE, 4)                              \
+    *(__esbmc_neon_q *)r = __builtin_bit_cast(__esbmc_neon_q, z);              \
+  }
+
+/* Write to r the D vector at a widened and shifted left by shift, or its
+ * product with the D vector at b. The NeonTypeFlags code names the wide
+ * element type. */
+void __ESBMC_neon_widen(
+  void *r,
+  const void *a,
+  const void *b,
+  int type,
+  int mul,
+  int shift)
+{
+__ESBMC_HIDE:;
+  int is_unsigned = type & 0x10, poly = 0;
+  switch (type & 0xf)
+  {
+  case 1: /* Int16 */
+    if (is_unsigned)
+      __ESBMC_NEON_WIDEN(uint8_t, uint16_t)
+    else
+      __ESBMC_NEON_WIDEN(int8_t, int16_t)
+    break;
+  case 2: /* Int32 */
+    if (is_unsigned)
+      __ESBMC_NEON_WIDEN(uint16_t, uint32_t)
+    else
+      __ESBMC_NEON_WIDEN(int16_t, int32_t)
+    break;
+  case 3: /* Int64 */
+    if (is_unsigned)
+      __ESBMC_NEON_WIDEN(uint32_t, uint64_t)
+    else
+      __ESBMC_NEON_WIDEN(int32_t, int64_t)
+    break;
+  case 5: /* Poly16, from vmull_p8 */
+    poly = 1;
+    __ESBMC_NEON_WIDEN(uint8_t, uint16_t)
+    break;
+  default:
+    __ESBMC_assert(0, "unsupported NEON element type");
+  }
+}
+
+/* vmull_u8 and the rest; vmlal, vmlsl and the _high forms are vector
+ * expressions around vmull in arm_neon.h, as vmovl_high is around vshll_n. */
+__esbmc_neon_q
+__ESBMC_neon_vmull_v(__esbmc_neon_d a, __esbmc_neon_d b, int type)
+{
+__ESBMC_HIDE:;
+  __esbmc_neon_q r;
+  __ESBMC_neon_widen(&r, &a, &b, type, 1, 0);
+  return r;
+}
+
+__esbmc_neon_q __ESBMC_neon_vmovl_v(__esbmc_neon_d a, int type)
+{
+__ESBMC_HIDE:;
+  __esbmc_neon_q r;
+  __ESBMC_neon_widen(&r, &a, &a, type, 0, 0);
+  return r;
+}
+
+__esbmc_neon_q __ESBMC_neon_vshll_n_v(__esbmc_neon_d a, int n, int type)
+{
+__ESBMC_HIDE:;
+  __esbmc_neon_q r;
+  __ESBMC_neon_widen(&r, &a, &a, type, 0, n);
+  return r;
+}
+
+/* vextq_u8(a, b, n) and the rest take the lanes from n on of a followed by
+ * b. Lanes are moved whole, so only their size matters. */
+#define __ESBMC_NEON_EXT_BYTE(j)                                               \
+  if ((j) < w)                                                                 \
+    r[j] = (j) + off < w ? a[(j) + off] : b[(j) + off - w];
+
+#define __ESBMC_NEON_EXT(name, V, W)                                           \
+  V __ESBMC_neon_##name(V a, V b, int n, int type)                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    int size;                                                                  \
+    switch (type & 0xf)                                                        \
+    {                                                                          \
+    case 0:  /* Int8 */                                                        \
+    case 4:  /* Poly8 */                                                       \
+    case 12: /* MFloat8 */                                                     \
+      size = 1;                                                                \
+      break;                                                                   \
+    case 1:  /* Int16 */                                                       \
+    case 5:  /* Poly16 */                                                      \
+    case 8:  /* Float16 */                                                     \
+    case 11: /* BFloat16 */                                                    \
+      size = 2;                                                                \
+      break;                                                                   \
+    case 2: /* Int32 */                                                        \
+    case 9: /* Float32 */                                                      \
+      size = 4;                                                                \
+      break;                                                                   \
+    case 3:  /* Int64 */                                                       \
+    case 6:  /* Poly64 */                                                      \
+    case 10: /* Float64 */                                                     \
+      size = 8;                                                                \
+      break;                                                                   \
+    default:                                                                   \
+      __ESBMC_assert(0, "unsupported NEON element type");                      \
+      size = 1;                                                                \
+    }                                                                          \
+    int off = n * size, w = W;                                                 \
+    V r;                                                                       \
+    __ESBMC_NEON_REP16(__ESBMC_NEON_EXT_BYTE, 0)                               \
+    return r;                                                                  \
+  }
+
+__ESBMC_NEON_EXT(vext_v, __esbmc_neon_d, 8)
+__ESBMC_NEON_EXT(vextq_v, __esbmc_neon_q, 16)
