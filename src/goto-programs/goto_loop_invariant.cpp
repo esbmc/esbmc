@@ -44,6 +44,7 @@
 #include <functional>
 #include <climits>
 #include <map>
+#include <unordered_set>
 
 // ---------------------------------------------------------------------------
 // Shared helper: extract the loop invariant near a loop head
@@ -352,6 +353,50 @@ static bool lands_on_head(
   return true;
 }
 
+/// Whether a jump from outside \p loop lands inside it past its head. The base
+/// case and the havoc sit at the head, so such an entry runs one concrete
+/// iteration to the back edge, where the inductive step cuts it: every later
+/// iteration it leads to goes unchecked. k-induction meets the same shape in
+/// collect_entry_jumps.
+static bool entered_past_head(const goto_programt &body, const loopst &loop)
+{
+  const goto_programt::const_targett head = loop.get_original_loop_head();
+  std::unordered_set<const goto_programt::instructiont *> in_loop;
+  for (goto_programt::const_targett it = head; it != body.instructions.end();
+       ++it)
+  {
+    in_loop.insert(&*it);
+    if (it == loop.get_original_loop_exit())
+      break;
+  }
+  for (const auto &instr : body.instructions)
+    if (instr.is_goto() && !in_loop.count(&instr))
+      for (const auto &target : instr.targets)
+        if (target != head && in_loop.count(&*target))
+          return true;
+  return false;
+}
+
+/// Leave a loop to the unwinder once its base case is in place. The base case
+/// fills the head's slot, \p base_case, so the loop's own jumps to the head
+/// would re-run it, and its __ESBMC_old captures, on every iteration; send them
+/// to the head's own instruction, now \p moved_head, instead.
+static void leave_to_unwinder(
+  goto_programt::targett base_case,
+  goto_programt::targett moved_head,
+  goto_programt::targett exit)
+{
+  for (goto_programt::targett it = moved_head;; ++it)
+  {
+    if (it->is_goto())
+      for (goto_programt::targett &target : it->targets)
+        if (target == base_case)
+          target = moved_head;
+    if (it == exit)
+      return;
+  }
+}
+
 /// goto-cc gives a loop at the start of a do-while body the do-while's head, so
 /// a back edge from that inner loop must re-establish a CBMC contract on the
 /// head too (#11085).
@@ -410,6 +455,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // `loop_head` iterator no longer denotes the loop head afterwards. Anchor the
   // instruction that follows it, which no insertion before the head can move.
   goto_programt::targett after_head = std::next(loop_head);
+  const bool past_head_entry = entered_past_head(goto_function.body, loop);
 
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, old_captures, side_effects);
@@ -423,14 +469,23 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // the loop dropped unsolved (issue #7478). Leave the loop for the unwinder
   // rather than report a proof we did not make. The base case above is checked
   // against the concrete pre-loop state and needs no havoc, so it still stands.
+  const char *uncovered = nullptr;
   if (
     loop.writes_through_pointer() &&
     (loop.pointer_array_write_unresolvable() || !pointees_havocable(loop)))
+    uncovered = "the loop writes through a pointer the havoc cannot cover";
+  else if (past_head_entry)
+    uncovered =
+      "a jump from outside the loop enters it past its head, "
+      "bypassing the havoc";
+  if (uncovered)
   {
     log_warning(
-      "loop invariant at {} not checked beyond its base case: the loop writes "
-      "through a pointer the havoc cannot cover",
-      loop.get_original_loop_head()->location.as_string());
+      "loop invariant at {} not checked beyond its base case: {}",
+      loop.get_original_loop_head()->location.as_string(),
+      uncovered);
+    leave_to_unwinder(
+      loop_head, std::prev(after_head), loop.get_original_loop_exit());
     return;
   }
 

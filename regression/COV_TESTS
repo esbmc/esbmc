@@ -372,6 +372,11 @@ regression/loop-invariants/github_invariant_call_after_loop
 regression/loop-invariants/k_induction_issue_side_effects_combined
 regression/loop-invariants/loop_assigns_array_elem_pass
 regression/loop-invariants/loop_old_snapshot_pass
+regression/loop-invariants/past_head_entry
+regression/loop-invariants/past_head_entry_fail
+regression/loop-invariants/past_head_entry_old
+regression/loop-invariants/past_head_rotated_fail
+regression/loop-invariants/past_head_to_back_edge_fail
 regression/mopsa/attribute_error
 regression/mopsa/object_in_condition
 regression/neurosym/logic-qf-bv
