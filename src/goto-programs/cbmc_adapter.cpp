@@ -1927,6 +1927,19 @@ bool is_zero_index(const irept &i)
   return is_zero_fill(*e);
 }
 
+// Turns `code` into the call `callee(args...)`, discarding any result.
+void make_call(irept &code, const char *callee, irept::subt args)
+{
+  irept func(irep_idt("symbol"));
+  func.set("identifier", callee);
+
+  irept arguments(irep_idt("arguments"));
+  arguments.get_sub() = std::move(args);
+
+  code.add("statement") = mk("function_call");
+  code.get_sub() = {get_nil_irep(), func, arguments};
+}
+
 // Rewrites JBMC's `ARRAY_SET payload <0|NULL>` into a __ESBMC_memset call over
 // the byte extent recorded when the payload was allocated two instructions
 // earlier. __CPROVER_array_set carries no length of its own -- that is why the
@@ -1946,55 +1959,13 @@ bool rewrite_java_array_set(
   if (it == payload_extent.end())
     return false;
 
-  irept func(irep_idt("symbol"));
-  func.set("identifier", "c:@F@__ESBMC_memset");
-
-  irept args(irep_idt("arguments"));
-  args.get_sub().push_back(ops[0]);
-  args.get_sub().push_back(
-    mk_bv_const(static_cast<const irept &>(int_type()), 0));
-  args.get_sub().push_back(it->second);
-
-  code.add("statement") = mk("function_call");
-  code.get_sub().clear();
-  code.get_sub().push_back(get_nil_irep());
-  code.get_sub().push_back(func);
-  code.get_sub().push_back(args);
+  make_call(
+    code,
+    "c:@F@__ESBMC_memset",
+    {ops[0],
+     mk_bv_const(static_cast<const irept &>(int_type()), 0),
+     it->second});
   return true;
-}
-
-// The whole object a HAVOC_OBJECT operand designates, or null when it is not
-// statically known. CBMC hands the instruction a `void *`, but its semantics is
-// the entire object containing the target, so a subobject address (`&a[0]` from
-// an array decay, `&s.f`) walks down to the base symbol. A pointer whose value
-// is not an address-of -- a `malloc` result, a parameter -- names no symbol
-// here, and the caller declines rather than havocking the wrong storage.
-const irept *havoc_target(const irept &op)
-{
-  const irept *e = &op;
-  while (e->id() == "typecast")
-  {
-    if (e->get_sub().empty())
-      return nullptr;
-    e = &e->get_sub().front();
-  }
-
-  // Only an address-of names an object here. A pointer *value*
-  // (`havoc_object(p)` after `p = malloc(n)`) would otherwise reach the walk
-  // below as the symbol `p` itself, and havocking `p` scribbles on the pointer,
-  // not the heap object it designates -- a different program, not a weaker one.
-  if (e->id() != "address_of" || e->get_sub().empty())
-    return nullptr;
-  e = &e->get_sub().front();
-
-  while (e->id() == "index" || e->id() == "member")
-  {
-    if (e->get_sub().empty())
-      return nullptr;
-    e = &e->get_sub().front();
-  }
-
-  return e->id() == "symbol" ? e : nullptr;
 }
 
 // The array a CBMC whole-object array codet (ARRAY_SET / ARRAY_COPY /
@@ -2107,20 +2078,11 @@ bool rewrite_array_copy_call(irept &code, const irep_idt &stmt)
     ops[1].find("type").id() != "pointer")
     return false;
 
-  irept func(irep_idt("symbol"));
-  func.set(
-    "identifier",
+  make_call(
+    code,
     stmt == "array_copy" ? "c:@F@__cbmc_array_copy_impl"
-                         : "c:@F@__cbmc_array_replace_impl");
-
-  irept args(irep_idt("arguments"));
-  args.get_sub() = code.get_sub();
-
-  code.add("statement") = mk("function_call");
-  code.get_sub().clear();
-  code.get_sub().push_back(get_nil_irep());
-  code.get_sub().push_back(func);
-  code.get_sub().push_back(args);
+                         : "c:@F@__cbmc_array_replace_impl",
+    ops);
   return true;
 }
 
@@ -2185,44 +2147,31 @@ bool rewrite_array_equal(irept &code)
   return true;
 }
 
-// Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into the ASSIGN of a
-// nondet side effect the native pipeline would produce, so the object loses
-// its value the way CBMC's own symex drops it. The instruction carries no
-// extent -- that is why an unrecoverable target is still declined -- but a
-// whole-symbol assignment needs none: the nondet takes the symbol's type.
+// Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into a call that havocs
+// the whole of each object `p` may point into, whatever its offset, and claims
+// nothing about it -- not even that it is live -- as CBMC's havoc_rec
+// (symex_other.cpp).
 bool rewrite_havoc_object(irept &code)
 {
-  const irept::subt ops = code.get_sub();
-  if (ops.size() != 1)
+  if (code.get_sub().size() != 1)
     return false;
 
-  const irept *target = havoc_target(ops[0]);
-  if (!target)
-    return false;
-
-  irept nondet(irep_idt("sideeffect"));
-  nondet.add("statement") = mk("nondet");
-  nondet.add("type") = target->find("type");
-
-  code.add("statement") = mk("assign");
-  code.get_sub().clear();
-  code.get_sub().push_back(*target);
-  code.get_sub().push_back(nondet);
+  make_call(code, "c:@F@__ESBMC_havoc_object_unchecked", code.get_sub());
   return true;
 }
 
 // CBMC's whole-object codet statements are size-implicit: `array_set`
 // (__CPROVER_array_set: set every element of the pointed-to array) and
-// `havoc_object` take the extent from the pointee's type, which nothing here
+// `array_equal` take the extent from the pointee's type, which nothing here
 // reconstructs. Rewrite the shapes that need no extent and return the ESBMC
 // instruction kind that rewrite implies (13 ASSIGN, 16 FUNCTION_CALL -- shared
 // numbering, see map_cbmc_instruction_type), or null when `code` is not one of
 // them. The rest are declined by throwing, which create_goto_program's handler
 // turns into a graceful error exit (roadmap §4.7): migrate would otherwise
 // abort() on them (SIGABRT). These reach the adapter only from an explicit
-// __CPROVER_array_set / _array_equal / _havoc_object -- CBMC's
-// own memset lowering is retargeted to __ESBMC_memset in fix_builtin_call
-// before its ARRAY_SET body runs (§4.8).
+// __CPROVER_array_set / _array_equal -- CBMC's own memset lowering is
+// retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
+// runs (§4.8).
 const char *rewrite_whole_object_codet(
   irept &code,
   const std::unordered_map<std::string, irept> &payload_extent)
@@ -2253,7 +2202,7 @@ const char *rewrite_whole_object_codet(
   else if (stmt == "havoc_object")
   {
     if (rewrite_havoc_object(code))
-      return "13";
+      return "16";
   }
   else
     return nullptr;

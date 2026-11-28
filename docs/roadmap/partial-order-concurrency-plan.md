@@ -13,13 +13,13 @@ thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
-assumption, `abort()` included, stops only its own thread.
+assumption, `abort()` included, stops only its own thread, and a join on a
+thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
-run. Loop guards are not
-pruned by the interval domain, which would carry one thread's writes into
-the next. `--incremental-bmc` and `--falsification` raise its unwinding
-bound. The effort figures are estimates.
+run. Loop guards are not pruned by the interval domain, which would carry one
+thread's writes into the next. `--incremental-bmc` and `--falsification`
+raise its unwinding bound. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -313,7 +313,7 @@ runs at a time on four cores, 2026-11-28). On the same counters, for 2, 3, 4,
 5, 6 and 8 threads, `--partial-order --bitwuzla` takes 0.3, 0.3, 0.7, 1.9,
 5.1 and >120 s with atomic sections and 0.3, 0.4, 0.5, 2.6, 8.1 and >120 s
 with the mutex. Z3 on the same build takes 0.2, 0.3, 0.5, 4.5, 21.2 and
->120 s, and 0.3, 0.3, 0.7, 15.1, 67.1 and >120 s; with `--ir`, 0.3, 0.3,
+>120 s, and 0.3, 0.3, 0.7, 15.1, 67.1 and >120 s; with `--ir`, 0.2, 0.3,
 0.3, 0.3, 0.8 and 62.2 s, and 0.2, 0.3, 0.3, 0.3, 0.7 and 35.9 s. The default
 with Bitwuzla takes 0.4 and 6.9 s for 2 and 3 threads with atomic sections
 and 2.3 s for 2 with the mutex, and passes 120 s beyond. Every variant
@@ -336,6 +336,12 @@ arrays, so a join on `id[j]` reads the ids' array in its event's guard; the
 slicer now counts that read, where it had dropped the stores to the array
 (`partial_order_incremental_join*`). `--k-induction` is still rejected; the
 SV-COMP wrapper's concurrency path is the next step towards a benchexec run.
+
+A halt hid violations. Once any thread halted, a join on a thread that never
+halts was taken never to return, since the disjunction of no halts is true,
+and the joining thread's later claims held. So main's `reach_error()`, which
+`--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
+never reported. Fixed: such a thread ends (`partial_order_halt_*`).
 
 ## 5. Tests
 
