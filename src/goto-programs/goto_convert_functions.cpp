@@ -504,9 +504,9 @@ static const locationt &statement_location(const expr2tc &code2)
 // arguments (a single FUNCTION_CALL; the return-unused requirement means
 // do_function_call's temp-symbol machinery is never entered, so this kind
 // carries no shared-counter byte-identity risk), an expression statement whose
-// operand is a code cpp-throw (a `throw ...;`), which is delegated to the
-// legacy convert() exactly as convert_expression's is_code branch does so a
-// throw no longer forces a whole-function fallback, a throw in statement
+// operand is code (in practice a cpp-throw, `throw ...;`), which is delegated
+// to the legacy convert() exactly as convert_expression's is_code branch does
+// so it no longer forces a whole-function fallback, a throw in statement
 // position (code_cpp_throw2t), delegated the same way, and a source-level
 // try/catch (code_cpp_catch2t), delegated to the legacy convert()/convert_catch
 // so the statements around it convert natively. Each reads its own code_*2t
@@ -720,24 +720,18 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
-    // convert_expression re-dispatches a code-typed operand straight through
-    // the legacy convert(): the --irep2-bodies round-trip lowers an
-    // expression-position side_effect_exprt("cpp-throw") to its code form
-    // codet("cpp-throw"), the only code shape that reaches here (migrate.cpp).
-    // Reproduce that delegation for cpp-throw so a throw statement no longer
-    // forces a whole-function fallback -- convert()'s convert_throw owns the
-    // C++ stack unwind and the throw-object side-effect lowering. The codet's
-    // own location already comes from migrate_expr_back (code_cpp_throw2t
-    // .location); what the round-trip drops is the location on its thrown-value
-    // operands, which convert_throw reads when lowering a thrown temporary.
-    // Run the same restore_value_locations pass the legacy path applies to the
-    // round-tripped body -- it pushes the enclosing statement location down
-    // onto those operands without touching the codet's own location. Any other
-    // code operand is unexpected here; fall back.
+    // convert_expression re-dispatches a code-typed operand, of any statement
+    // kind, straight through the legacy convert(); do the same. The common
+    // case is the --irep2-bodies round-trip lowering an expression-position
+    // side_effect_exprt("cpp-throw") to its code form codet("cpp-throw")
+    // (migrate.cpp), where convert()'s convert_throw owns the C++ stack unwind
+    // and the throw-object side-effect lowering. The codet's own location
+    // comes from migrate_expr_back; what the round-trip drops is the location
+    // on its value operands. Run the same restore_value_locations pass the
+    // legacy path applies to the round-tripped body: on that path the pass
+    // reaches this operand with this statement's effective location.
     if (op.is_code())
     {
-      if (op.statement() != "cpp-throw")
-        return false;
       restore_value_locations(
         op, effective_location(expr_stmt.location, inherited));
       convert(to_code(op), dest);
