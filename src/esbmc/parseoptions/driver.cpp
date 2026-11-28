@@ -539,8 +539,15 @@ int esbmc_parseoptionst::do_partial_order(
         options.get_bool_option("deadlock-check")))
     return 1;
   // Symex runs threads one after another, so the online interval domain
-  // would hand one thread's writes to the next thread's loop guards.
+  // would hand one thread's writes to the next thread's loop guards, and the
+  // solver would answer the --smt-symex-* questions for that one order.
   options.set_option("no-interval-symex-guard", true);
+  for (const char *flag :
+       {"smt-symex-guard",
+        "smt-symex-assert",
+        "smt-symex-assume",
+        "smt-thread-guard"})
+    options.set_option(flag, false);
   if (
     options.get_bool_option("incremental-bmc") ||
     options.get_bool_option("falsification"))

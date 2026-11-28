@@ -249,10 +249,12 @@ void esbmc_parseoptionst::configure_sv_comp_threads(
   options.set_option("cswitch-skip-readonly-globals", true);
   // Bounded rounds first can only report a violation (#6831, #6947); they
   // cannot run with --multi-property. A boost default makes cmdline.isset
-  // true, so test the option itself (#8220).
+  // true, so test the option itself (#8220). --partial-order has no schedules
+  // to bound.
   if (
     options.get_option("falsify-context-bound").empty() &&
-    !options.get_bool_option("multi-property"))
+    !options.get_bool_option("multi-property") &&
+    !options.get_bool_option("partial-order"))
     options.set_option("falsify-context-bound", "3");
 
   // --smt-symex-guard makes sibling schedules share a solver context (#6831,
