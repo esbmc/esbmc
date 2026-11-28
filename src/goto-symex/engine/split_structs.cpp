@@ -41,6 +41,30 @@ public:
     return use == uset::plain && reinterprets ? uset::whole_escapes : use;
   }
 
+  /* Whether the index of the struct element @p e is a constant inside a
+   * fixed-size array; anything else keeps the array whole. */
+  static bool constant_in_bounds(const expr2tc &e)
+  {
+    const index2t &ix = to_index2t(e);
+    if (!is_array_type(ix.source_value) || !is_constant_int2t(ix.index))
+      return false;
+    const array_type2t &at = to_array_type(ix.source_value->type);
+    if (at.size_is_infinite || !is_constant_int2t(at.array_size))
+      return false;
+    const BigInt &i = to_constant_int2t(ix.index).value;
+    return !i.is_negative() && i < to_constant_int2t(at.array_size).value;
+  }
+
+  /* The symbol under a chain of members and indices. */
+  static const expr2tc *symbol_root(const expr2tc &e)
+  {
+    const expr2tc *root = &e;
+    while (is_member2t(*root) || is_index2t(*root))
+      root = is_member2t(*root) ? &to_member2t(*root).source_value
+                                : &to_index2t(*root).source_value;
+    return is_symbol2t(*root) ? root : nullptr;
+  }
+
   /* Records the object @p sym names; one read at two types stays whole. */
   irep_idt see(const expr2tc &sym)
   {
@@ -48,6 +72,23 @@ public:
     if (!fresh && it->second != sym->type)
       excluded.insert(it->first);
     return it->first;
+  }
+
+  void note_dynamic_index(const expr2tc &e)
+  {
+    if (!is_index2t(e) || !is_struct_type(e->type) || constant_in_bounds(e))
+      return;
+    if (const expr2tc *root = symbol_root(e))
+      excluded.insert(see(*root));
+  }
+
+  static const expr2tc *field_source(const expr2tc &e)
+  {
+    if (is_member2t(e))
+      return &to_member2t(e).source_value;
+    if (is_index2t(e) && is_struct_type(e->type))
+      return &to_index2t(e).source_value;
+    return nullptr;
   }
 
   /* One walk over @p e; a member of a symbol is not a use of the whole. */
@@ -64,6 +105,8 @@ public:
     }
     use = use_under(e, use);
 
+    note_dynamic_index(e);
+
     if (is_symbol2t(e))
     {
       const irep_idt name = see(e);
@@ -71,11 +114,12 @@ public:
         excluded.insert(name);
       return;
     }
-    if (is_member2t(e) && is_symbol2t(to_member2t(e).source_value))
+    const expr2tc *source = field_source(e);
+    if (source && is_symbol2t(*source))
     {
-      note(
-        to_member2t(e).source_value,
-        use == uset::any_escapes ? use : uset::plain);
+      if (is_index2t(e))
+        note(to_index2t(e).index);
+      note(*source, use == uset::any_escapes ? use : uset::plain);
       return;
     }
     e->foreach_operand([this, use](const expr2tc &op) { note(op, use); });
@@ -274,9 +318,26 @@ bool layable(const type2tc &t)
  * into when its nested structs are split too. */
 constexpr size_t max_leaves = 4096;
 
-/* The scalar fields of @p t once every nested struct is split. */
+/* The elements of a fixed-size array of structs, else 0. */
+size_t struct_elements(const type2tc &t)
+{
+  if (!is_array_type(t))
+    return 0;
+  const array_type2t &a = to_array_type(t);
+  if (
+    a.size_is_infinite || !is_constant_int2t(a.array_size) ||
+    !is_struct_type(a.subtype))
+    return 0;
+  const BigInt &n = to_constant_int2t(a.array_size).value;
+  return n.is_negative() || n > BigInt(max_leaves) ? 0 : n.to_uint64();
+}
+
+/* The scalar fields of @p t once every nested struct and array of structs is
+ * split. */
 size_t leaf_count(const type2tc &t)
 {
+  if (const size_t n = struct_elements(t))
+    return n * leaf_count(to_array_type(t).subtype);
   if (!is_struct_type(t))
     return 1;
   size_t n = 0;
@@ -285,8 +346,7 @@ size_t leaf_count(const type2tc &t)
   return n;
 }
 
-/* A nested struct member is split as well. */
-bool nestable(const type2tc &t)
+bool nestable_struct(const type2tc &t)
 {
   if (!is_struct_type(t))
     return false;
@@ -295,17 +355,20 @@ bool nestable(const type2tc &t)
          std::all_of(st.members.begin(), st.members.end(), layable);
 }
 
+/* A nested struct or array of structs member is split as well. */
+bool nestable(const type2tc &t)
+{
+  return struct_elements(t) ? nestable_struct(to_array_type(t).subtype)
+                            : nestable_struct(t);
+}
+
 /* A static object stays whole when it is per-thread, or when the
  * memory-leak check reads it as a root by its own name. */
 bool splittable(const symbolt &s, const type2tc &type, bool leak_roots)
 {
-  if (
-    s.is_extern || s.mode == "Python" || !is_struct_type(type) ||
-    (s.static_lifetime && (leak_roots || s.is_thread_local)))
-    return false;
-  const struct_type2t &st = to_struct_type(type);
-  return !st.members.empty() &&
-         std::all_of(st.members.begin(), st.members.end(), layable);
+  return !s.is_extern && s.mode != "Python" &&
+         !(s.static_lifetime && (leak_roots || s.is_thread_local)) &&
+         nestable(type);
 }
 } // namespace
 
@@ -341,33 +404,42 @@ bool split_structst::enabled(
 
 void split_structst::add_fields(
   const symbolt &s,
-  const struct_type2t &st,
+  const type2tc &type,
   contextt &context,
   bool nest)
 {
   std::vector<expr2tc> &fields = split[s.id];
   auto &member_index = index[s.id];
   auto &closure = all[s.id];
-  for (size_t k = 0; k < st.members.size(); k++)
+  const size_t elements = struct_elements(type);
+  const struct_type2t &st =
+    to_struct_type(elements ? to_array_type(type).subtype : type);
+  const size_t count = elements ? elements : st.members.size();
+  for (size_t k = 0; k < count; k++)
   {
-    member_index.emplace(st.member_names[k], k);
+    const type2tc &field_type =
+      elements ? to_array_type(type).subtype : st.members[k];
+    if (!elements)
+      member_index.emplace(st.member_names[k], k);
     const std::string id = id2string(s.id) + "::" + std::to_string(k);
-    fields.push_back(symbol2tc(st.members[k], id));
+    fields.push_back(symbol2tc(field_type, id));
     closure.push_back(fields.back());
     field_ids.insert(id);
-    if (is_untracked_scalar(st.members[k]))
+    if (is_untracked_scalar(field_type))
       untracked_fields.insert(id);
     symbolt var = s;
     var.id = id;
-    var.name = id2string(s.name) + "." + id2string(st.member_pretty_names[k]);
+    var.name =
+      elements ? id2string(s.name) + "[" + std::to_string(k) + "]"
+               : id2string(s.name) + "." + id2string(st.member_pretty_names[k]);
     var.is_parameter = false;
-    var.set_type(st.members[k]);
+    var.set_type(field_type);
     var.set_value(expr2tc());
     if (!context.find_symbol(id))
       context.add(var);
-    if (nest && nestable(st.members[k]))
+    if (nest && nestable(field_type))
     {
-      add_fields(var, to_struct_type(st.members[k]), context, nest);
+      add_fields(var, field_type, context, nest);
       const auto &inner = all.at(id);
       closure.insert(closure.end(), inner.begin(), inner.end());
     }
@@ -403,14 +475,13 @@ void split_structst::analyse(
     if (
       scan.excluded.count(name) ||
       ((scan.addressed.count(name) || address_taken_locals.count(name)) &&
-       !by_field_paths.count(name)))
+       (is_array_type(type) || !by_field_paths.count(name))))
       continue;
     const symbolt *s = ns.lookup(name);
     if (!s || !splittable(*s, type, leak_roots))
       continue;
 
-    add_fields(
-      *s, to_struct_type(type), context, leaf_count(type) <= max_leaves);
+    add_fields(*s, type, context, leaf_count(type) <= max_leaves);
   }
   if (!split.empty())
     log_status("Field-sensitive SSA splits {} struct object(s)", split.size());
@@ -453,21 +524,34 @@ expr2tc split_structst::whole(const expr2tc &sym) const
     expr2tc at = at_level_of(field, s);
     members.push_back(fields(to_symbol2t(field).thename) ? whole(at) : at);
   }
+  if (is_array_type(sym->type))
+    return constant_array2tc(sym->type, std::move(members));
   return constant_struct2tc(sym->type, std::move(members));
 }
 
 expr2tc split_structst::field_of(const expr2tc &e) const
 {
-  if (!is_member2t(e))
+  if (!is_member2t(e) && !is_index2t(e))
     return expr2tc();
-  const member2t &m = to_member2t(e);
-  const expr2tc base =
-    is_symbol2t(m.source_value) ? m.source_value : field_of(m.source_value);
+  const expr2tc &source =
+    is_member2t(e) ? to_member2t(e).source_value : to_index2t(e).source_value;
+  const expr2tc base = is_symbol2t(source) ? source : field_of(source);
   if (is_nil_expr(base))
     return base;
   const symbol2t &s = to_symbol2t(base);
   const std::vector<expr2tc> *f = fields(s.thename);
-  return f ? at_level_of((*f)[index.at(s.thename).at(m.member)], s) : expr2tc();
+  if (!f)
+    return expr2tc();
+  size_t k;
+  if (is_member2t(e))
+    k = index.at(s.thename).at(to_member2t(e).member);
+  else
+  {
+    // The eligibility scan keeps every other index off a split array.
+    assert(is_constant_int2t(to_index2t(e).index));
+    k = to_constant_int2t(to_index2t(e).index).value.to_uint64();
+  }
+  return at_level_of((*f)[k], s);
 }
 
 /// An L2 name, or a member of one. An L2 name of a split object is the whole

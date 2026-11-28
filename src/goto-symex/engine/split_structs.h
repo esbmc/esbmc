@@ -89,8 +89,8 @@ public:
   /// The struct of @p sym's field symbols.
   expr2tc whole(const expr2tc &sym) const;
 
-  /// The field symbol a chain of members over a split object names, at the
-  /// object's level, or nil.
+  /// The field symbol a chain of members and constant indices over a split
+  /// object names, at the object's level, or nil.
   expr2tc field_of(const expr2tc &e) const;
 
 private:
@@ -98,11 +98,12 @@ private:
   static bool
   enabled(const goto_functionst &goto_functions, const optionst &options);
 
-  /// Record the field symbols of @p s, of type @p st, and add them to
-  /// @p context; with @p nest, a struct member is split in turn.
+  /// Record the field symbols of @p s, a struct or an array of structs of
+  /// type @p type, and add them to @p context; with @p nest, a struct or
+  /// array of structs member is split in turn.
   void add_fields(
     const symbolt &s,
-    const struct_type2t &st,
+    const type2tc &type,
     contextt &context,
     bool nest);
 
