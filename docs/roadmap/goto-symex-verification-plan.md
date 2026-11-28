@@ -12777,6 +12777,20 @@ memo misses (Q3, Q4).
    `common_pointer_prefix_size` a binary search over it. That replaces the
    O(Δ) walks with no assumption about Δ.
 
+**Result of item 1 alone (2026-11-28, Linux x86-64, Release, Z3, master
+`de079b0e3`).** Tried and not kept. Returning g1 untouched from the final
+hash-set path of `operator-=` when nothing is removed left `scalbrk`
+unchanged at N = 100 / 200 / 400 / 800. Symex: 0.033 / 0.109 / 0.430 / 1.785 s
+before, 0.031 / 0.104 / 0.411 / 1.814 s after. Encode: 0.017 / 0.091 / 0.487 /
+1.809 s before, 0.015 / 0.068 / 0.352 / 1.740 s after. Assignments are 1,416 /
+2,816 / 5,616 / 11,216 both times. Symex still grows ×3.8 to ×4.3 per
+doubling. The phi condition is the parked state's full guard, O(j) conjuncts,
+so it is built and then walked whatever `operator-=` returns. A callgrind run
+at N = 200 puts the inclusive cost in `get_original_name_rec`,
+`goto_symex_statet::rename_type` and `expr2t::simplify`, the three walks of
+Q3, not in guard algebra. Item 1 is not a fix on its own. Q3 is the next step,
+and items 2 and 3 remain untested.
+
 **Must not break.** `g1 -= g2` and `g1 |= g2` must keep their meaning as
 sets of conjuncts, and the base must stay the left-leaning chain over the
 list, because `cached_prefix_expr` relies on that invariant. Keep the
