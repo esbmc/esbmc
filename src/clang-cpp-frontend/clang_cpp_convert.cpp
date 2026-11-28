@@ -2021,6 +2021,20 @@ bool clang_cpp_convertert::get_constructor_call(
   if (get_type(constructor_call.getType(), type))
     return true;
 
+  // `T()` and `new T()` of a class whose default constructor is trivial
+  // zero-initialise the object ([dcl.init]/8). Such a constructor has no body
+  // to call, so the object would be left nondeterministic (#11171).
+  if (
+    constructor_call.requiresZeroInitialization() &&
+    constructor_call.getConstructor()->isTrivial() &&
+    constructor_call.getConstructor()->isDefaultConstructor() &&
+    !new_expr.base_ctor_derived() && !new_expr.get_bool("#member_init") &&
+    !new_expr.get_bool("#delegating_ctor"))
+  {
+    new_expr = gen_zero(get_complete_type(type, ns));
+    return false;
+  }
+
   side_effect_expr_function_callt call;
   call.function() = callee_decl;
   call.type() = type;
