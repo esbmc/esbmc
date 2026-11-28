@@ -54,6 +54,10 @@ bool check_var_name(const expr2tc &expr)
   symbol2t s = to_symbol2t(expr);
   std::string identifier = s.thename.as_string();
 
+  // fesetround writes this global, so the loop modifies it (#11195).
+  if (identifier == "c:@__ESBMC_rounding_mode")
+    return true;
+
   std::size_t found = identifier.find("__ESBMC_");
   if (found != std::string::npos)
     return false;

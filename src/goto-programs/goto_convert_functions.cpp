@@ -467,6 +467,14 @@ static const locationt &statement_location(const expr2tc &code2)
     return to_code_cpp_throw2t(code2).location;
   case expr2t::code_cpp_catch_id:
     return to_code_cpp_catch2t(code2).location;
+  case expr2t::code_dead_id:
+    return to_code_dead2t(code2).location;
+  case expr2t::code_printf_id:
+    return to_code_printf2t(code2).location;
+  case expr2t::code_free_id:
+    return to_code_free2t(code2).location;
+  case expr2t::code_asm_id:
+    return to_code_asm2t(code2).location;
   default:
     return static_cast<const locationt &>(get_nil_irep());
   }
@@ -538,6 +546,24 @@ bool goto_convert_functionst::convert_native_full_expression(
     destroy_full_expression_temporaries(
       stack_size, to_code_expression2t(code2).location, dest);
   return true;
+}
+
+// Statements convert_native_rec has no arm for and hands to convert(), which
+// copies as DEAD/OTHER. code_cpp_delete2t and code_cpp_del_array2t are left
+// out: they back-migrate to a node whose id is not "code", which convert()
+// cannot take, so the fallback cannot convert them either.
+static bool is_delegated_code(const expr2tc &code2)
+{
+  switch (code2->expr_id)
+  {
+  case expr2t::code_dead_id:
+  case expr2t::code_printf_id:
+  case expr2t::code_free_id:
+  case expr2t::code_asm_id:
+    return true;
+  default:
+    return false;
+  }
 }
 
 bool goto_convert_functionst::convert_native_rec(
@@ -1221,6 +1247,12 @@ bool goto_convert_functionst::convert_native_rec(
 
     const locationt &here = effective_location(dw.location, inherited);
 
+    // A body that does not convert natively, or an empty or scope-leaking one,
+    // delegates the loop to convert_dowhile, as the while arm does.
+    unsigned tmp_before = tmp_symbol.counter;
+    irep_idt ctx_before = context.mark();
+    targetst targets_before = targets;
+
     // convert_dowhile lowers the condition with remove_sideeffects before it
     // saves the break/continue targets, and makes the first instruction that
     // emits the continue target. Keep both: the lowering may allocate from the
@@ -1271,8 +1303,13 @@ bool goto_convert_functionst::convert_native_rec(
       !body_ok || tmp_w.instructions.empty() ||
       targets.destructor_stack.size() != stack_before_body.size())
     {
-      targets.destructor_stack = stack_before_body;
-      return false;
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, here);
+      convert(to_code(op), dest);
+      return true;
     }
 
     y->make_goto(tmp_w.instructions.begin());
@@ -1828,6 +1865,17 @@ bool goto_convert_functionst::convert_native_rec(
     // handler -- which is what convert_catch's assert(operands >= 2) requires.
     exprt op = migrate_expr_back(code2);
     restore_value_locations(op, effective_location(c.location, inherited));
+    convert(to_code(op), dest);
+    return true;
+  }
+
+  // convert() copies these kinds as DEAD/OTHER, so delegate the statement as
+  // the cpp-throw arm does instead of declining the whole body.
+  if (is_delegated_code(code2))
+  {
+    exprt op = migrate_expr_back(code2);
+    restore_value_locations(
+      op, effective_location(statement_location(code2), inherited));
     convert(to_code(op), dest);
     return true;
   }

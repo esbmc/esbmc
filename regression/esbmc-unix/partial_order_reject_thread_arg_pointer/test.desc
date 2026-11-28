@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a thread argument that may point to a local yet, at file .*main\.c line 13 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

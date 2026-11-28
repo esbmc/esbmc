@@ -2,19 +2,22 @@
 
 **Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
-2026-11-24. `--partial-order` verifies programs on global scalars and arrays
-of them, including through pointers, with threads created in loops, mutexes,
-condition variables, `pthread_exit` and the scheduler intrinsics phase 1
-lists, without assumptions, and checks data races on scalars and deadlocks
-on mutexes and joins. Its counterexamples list steps in the order the
-solver's clocks give them, and its violation witnesses carry thread ids.
+2026-11-24. `--partial-order` verifies programs on global scalars, and
+arrays and structs of them, including through pointers and through global
+pointers whose values are globals' addresses, with threads created
+in loops, mutexes, condition variables, `pthread_exit` and the scheduler
+intrinsics phase 1 lists, without assumptions, and checks data races on
+scalars and deadlocks on mutexes and joins. Its counterexamples list steps
+in the order the solver's clocks give them, and its violation witnesses carry
+thread ids.
 A loop or recursion cut by `--no-unwinding-assertions` stops only its own
 thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread, also from inside
-a callee, and a join on a thread that ends returns.
+a callee, and a join on a thread that ends returns. A thread's argument
+may be a value or a global's address.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
 run. Loop guards are not pruned by the interval domain, which would carry one
@@ -357,6 +360,35 @@ every verdict right; both decide 126 and agree on all of them. The scope
 check rejects 101, 91 for a global that is not a scalar or an array of
 scalars; 64 time out and 15 run out of memory, against 162 and 44 for the
 default.
+
+A global struct whose fields are scalars, arrays or structs of them is one
+object, as an array is: a field read reads the struct, and a field write,
+directly or through a pointer, updates it. `pthread_` types stay out, since
+LOCK and UNLOCK events order them, and `--data-races-check` rejects a global
+struct as it does an array (`partial_order_struct*`). On the 473
+`unreach-call` tasks of the 26 `c/pthread*` directories of sv-benchmarks at
+`67f8e5a3`, this moved no task into scope: the scope check rejects 136, 86
+of them for a non-scalar global, and 58 of those, all in `pthread-wmm`, for
+an `int *` global such as `x$read_delayed_var`.
+
+A global pointer is now an event object too, if every value assigned to it,
+its initialiser included, is a global's address or null. A read may see any
+thread's write, so its value set becomes all of those values; taking the
+pointer's address is rejected (`partial_order_global_pointer*`,
+`partial_order_reject_pointer_*`). The 58 tasks enter scope and the scope
+check rejects 78. On them (Z3 4.8.12, 30 s, 4 jobs, 2026-11-28; all expect
+FAILED) `--partial-order` decides 29 (median 16.1 s on those both decide),
+times out on 28 and runs out of memory on `safe008_power.opt`; the default
+decides 45 (median 0.3 s). Both decide 26 and agree on all of them.
+
+`pthread_create` passes a thread argument other than NULL if it is a value,
+which the thread receives as it was at the spawn, or a global's address, which
+the thread dereferences as any pointer to a global. A pointer that may reach
+a local is still rejected, since the thread would read the local's last value
+in its owner's run (`partial_order_thread_arg*`). On the 405 SV-COMP tasks,
+no first rejection changes: the 30 tasks whose sources pass an argument other
+than NULL, 10 of them an address, are rejected earlier, 25 for a global that
+is not a scalar or an array of scalars.
 
 ## 5. Tests
 
