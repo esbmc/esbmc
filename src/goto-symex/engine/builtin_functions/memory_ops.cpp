@@ -2256,7 +2256,9 @@ void goto_symext::memset_finish(
   }
 }
 
-void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
+void goto_symext::intrinsic_havoc_object(
+  const code_function_call2t &call,
+  bool checked)
 {
   assert(call.operands.size() == 1);
   if (cur_state->guard.is_false())
@@ -2264,10 +2266,11 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
 
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
-  dereference(deref, dereferencet::INTERNAL);
+  dereference(deref, dereferencet::INTERNAL, !checked);
   for (const auto &item : internal_deref_items)
   {
-    check_read_only_write(item.object, item.guard);
+    if (checked)
+      check_read_only_write(item.object, item.guard);
     // Anything else is a constant, such as a string literal, or a function.
     if (!is_symbol2t(item.object) || is_code_type(item.object->type))
       continue;

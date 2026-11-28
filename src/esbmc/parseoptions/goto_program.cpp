@@ -829,6 +829,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     // calls it by name; the migrated CBMC irep gets its symbol from
     // lift_call_expressions().
     "__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);\n"
+    "void __ESBMC_havoc_object_unchecked(void *);\n"
     "_Bool __cbmc_is_fresh_check_impl(void *q, __SIZE_TYPE__ n)\n"
     "{\n"
     "  if (q == 0)\n"
@@ -903,6 +904,9 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)calloc,    (void *)__cbmc_allocate_impl,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)__cbmc_array_copy_impl, (void *)__cbmc_array_replace_impl,\n"
+    // cbmc_adapter's havoc_object target, which symex runs as an intrinsic
+    // but goto_inline needs listed as a function.
+    "  (void *)__ESBMC_havoc_object_unchecked,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";

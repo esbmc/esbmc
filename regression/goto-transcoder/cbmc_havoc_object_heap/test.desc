@@ -1,4 +1,5 @@
 CORE
 cbmc_havoc_object_heap.goto
---binary
-^ERROR: CBMC adapter: 'havoc_object' whole-object operations are not yet supported
+--binary --force-malloc-success
+^VERIFICATION FAILED$
+p\[0\] kept

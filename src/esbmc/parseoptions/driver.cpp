@@ -205,7 +205,8 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
         "lock-order-check",
         "atomicity-check",
         "ltl",
-        "interactive-ileaves"})
+        "interactive-ileaves",
+        "interval-symex-assert"})
     if (cmdline.isset(incompatible))
     {
       log_error("--partial-order cannot be combined with --{}", incompatible);
@@ -537,6 +538,9 @@ int esbmc_parseoptionst::do_partial_order(
         options.get_bool_option("data-races-check"),
         options.get_bool_option("deadlock-check")))
     return 1;
+  // Symex runs threads one after another, so the online interval domain
+  // would hand one thread's writes to the next thread's loop guards.
+  options.set_option("no-interval-symex-guard", true);
   if (
     options.get_bool_option("incremental-bmc") ||
     options.get_bool_option("falsification"))

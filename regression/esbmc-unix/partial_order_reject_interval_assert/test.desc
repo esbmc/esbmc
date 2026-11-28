@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --interval-symex-assert
+^ERROR: --partial-order cannot be combined with --interval-symex-assert$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z
