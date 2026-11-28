@@ -7,6 +7,7 @@
 #include <charconv>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <regex>
 
 using json = nlohmann::json;
@@ -437,6 +438,11 @@ void add_coverage_to_json(const goto_tracet &goto_trace, const namespacet &ns)
 
     test_entry["coverage"]["files"][file] = file_coverage;
   }
+
+  // Parallel solving reports from several threads; serialise the
+  // read-append-write cycle on report.json.
+  static std::mutex report_mutex;
+  const std::lock_guard<std::mutex> lock(report_mutex);
 
   // Read existing JSON and append new test
   json all_tests = []() {
