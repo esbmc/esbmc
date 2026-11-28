@@ -768,12 +768,18 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
   const auto &merge_variables = merge_state.level2.current_names;
 
   guard2tc tmp_guard;
+  expr2tc merged_guard;
   if (!cur_state->guard.is_false() && !merge_state.guard.is_false())
   {
     tmp_guard = merge_state.guard;
 
     // this gets the diff between the guards
     tmp_guard -= cur_state->guard;
+
+    // Once per merge, not per phi (plan §16.3 Q3). The guard algebra does not
+    // simplify conjuncts, e.g. a function-pointer call's SAME-OBJECT test.
+    merged_guard = tmp_guard.as_expr();
+    simplify(merged_guard);
   }
 
   // Only the names whose SSA record differs between the two paths need a
@@ -826,11 +832,8 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       rhs = cur_state_rhs;
     else
     {
-      // The guard was simplified by the guard algebra and the arms are
-      // renamed symbols, so only the new node needs its local rewrites; a
-      // whole-tree simplify and rename_type would re-walk the guard per
-      // variable (plan §16.3 Q3).
-      rhs = if2tc(type, tmp_guard.as_expr(), merge_state_rhs, cur_state_rhs);
+      // The guard and the arms are done, so only the new node is left.
+      rhs = if2tc(type, merged_guard, merge_state_rhs, cur_state_rhs);
       if (expr2tc folded = rhs->do_simplify(); !is_nil_expr(folded))
         rhs = folded;
       cur_state->rename_own_type(rhs);

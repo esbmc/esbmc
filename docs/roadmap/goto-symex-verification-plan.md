@@ -12872,17 +12872,26 @@ tracks integer-typed values (`uintptr_t` holding an address), so only the
 pointer-free aggregate case is already skipped (`type_has_pointer`, #7521).
 The next step is the `get_original_name` memo in `assignment`.
 
-**Result of the first two walks (2026-11-28, Linux x86-64, Release, Z3,
-master `09fa278af`).** `phi_function` now runs `do_simplify` on the new `if2t`
-node alone, the guard having been simplified by the guard algebra, and renames
-the types of its two arms instead of the whole tree. `scalbrk` at
-N = 400 / 800 / 1600: symex 0.48 / 1.69 / 8.93 s before, 0.30 / 1.40 / 8.27 s
-after; slicing 0.60 / 2.81 / 13.5 s before, 0.14 / 0.69 / 3.7 s after;
-encoding 0.53 / 2.81 / 13.6 s before, 0.18 / 0.67 / 3.1 s after. Assignments
-are unchanged. Slicing and encoding fall to near linear, which supports Q4's
-hypothesis. Symex still grows about ×4 to ×6 per doubling: Q1's guard rebuild
-and the `get_original_name` memo in `assignment` are untouched. Open: the
-per-`assignment` memo; the value-set skip is settled above.
+**Result of the first two walks (2026-11-28).** `phi_function` now simplifies
+the merged guard once per merge, then runs `do_simplify` and `rename_own_type`
+on each new `if2t` node alone and renames the types of its two arms, instead of
+simplifying and renaming the whole tree once per variable. The guard still
+needs its simplify: the guard algebra does not simplify conjuncts, and without
+it `irep2_only_struct_literal_padding` keeps an unfolded `SAME-OBJECT` test from
+a function-pointer call and grows from 19 to 43 assignments. It is not
+type-renamed again, since `rename` renamed each conjunct's types when the
+branch was taken, and a non-const walk would clone the shared chain. `scalbrk`
+on macOS arm64, Debug, Bitwuzla, master `33324e9754`, at N = 400 / 800: symex
+2.38 / 8.92 s before, 1.76 / 6.75 s after; slicing 1.41 / 6.64 s before,
+1.02 / 4.25 s after; encoding 1.15 / 6.48 s before, 0.79 / 3.48 s after. A
+first version without the guard simplify measured slicing 0.60 / 2.81 / 13.5 s
+before and 0.14 / 0.69 / 3.7 s after at N = 400 / 800 / 1600 (Linux x86-64,
+Release, Z3). Assignments are unchanged on `scalbrk`, and assignments, VCCs and
+verdicts are unchanged on 450 `regression/esbmc` tests. The gain is a constant
+factor: slicing and encoding still grow about ×4 to ×5 per doubling, and so
+does symex, because Q1's guard rebuild and the `get_original_name` memo in
+`assignment` are untouched. Open: the per-`assignment` memo; the value-set skip
+is settled above.
 
 **Must not break.** R61, R62 and R82 were fixed by making `rename_type`
 rename every symbolic size, through pointer subtypes. The flag must be set
