@@ -8,16 +8,21 @@ Each test runs twice, with its test.desc arguments as written and with
 both. Only tests whose sources include <pthread.h> run, and the
 partial_order_* tests are skipped, since they pin --partial-order already.
 
+An SV-COMP task definition (.yml), or a directory of them, runs its
+unreach-call property with the options of the phase 0 measurement: its data
+model and --no-bounds-check --no-pointer-check --no-div-by-zero-check
+--no-align-check. Tasks without that property are skipped.
+
 Usage:
     partial_order_compare.py [--esbmc PATH] [--timeout S] [--jobs N]
                              [--csv FILE] [--extra-args ARGS]
-                             SUITE_DIR [SUITE_DIR ...]
+                             PATH [PATH ...]
 
 Each run is classified as SUCCESSFUL, FAILED, UNKNOWN, REJECTED (the scope
 check or a flag conflict refused the input), TIMEOUT or ERROR. The summary
 counts the tests both modes decide, how many of those agree, and lists every
-disagreement with the verdict test.desc expects. A disagreement fails the
-script, so it can gate a change.
+disagreement with the expected verdict, and counts each mode's verdicts that
+contradict it. A disagreement fails the script, so it can gate a change.
 """
 import argparse
 import collections
@@ -29,6 +34,8 @@ import shlex
 import subprocess
 import sys
 import time
+
+import yaml
 
 VERDICTS = (
     ("VERIFICATION SUCCESSFUL", "SUCCESSFUL"),
@@ -51,6 +58,20 @@ def parse_desc(path):
             if text in line:
                 expected = verdict
     return lines[0].strip(), lines[1].strip(), lines[2].strip(), expected
+
+
+SVCOMP_ARGS = "--no-bounds-check --no-pointer-check --no-div-by-zero-check --no-align-check"
+
+
+def parse_task(path):
+    with open(path, encoding="utf-8") as f:
+        task = yaml.safe_load(f)
+    for prop in task.get("properties", []):
+        if prop["property_file"].endswith("unreach-call.prp"):
+            expected = "SUCCESSFUL" if prop["expected_verdict"] else "FAILED"
+            model = "--32" if task["options"]["data_model"] == "ILP32" else "--64"
+            return "svcomp", task["input_files"], f"{model} {SVCOMP_ARGS}", expected
+    return None
 
 
 def uses_pthreads(test_dir):
@@ -91,25 +112,37 @@ def run(esbmc, test_dir, src, args, timeout):
     return verdict, detail, elapsed
 
 
+def describe(test):
+    if test.endswith(".yml"):
+        return os.path.dirname(os.path.abspath(test)), parse_task(test)
+    return test, parse_desc(os.path.join(test, "test.desc"))
+
+
 def compare(job):
-    esbmc, test_dir, timeout, extra = job
-    level, src, args, expected = parse_desc(os.path.join(test_dir, "test.desc"))
+    esbmc, test, timeout, extra = job
+    test_dir, (level, src, args, expected) = describe(test)
     args += extra
     default = run(esbmc, test_dir, src, args, timeout)
     partial = run(esbmc, test_dir, src, args + " --partial-order", timeout)
-    return test_dir, level, expected, default, partial
+    return test, level, expected, default, partial
 
 
-def collect(suites):
+def wanted(path):
+    if path.endswith(".yml"):
+        return parse_task(path) is not None
+    desc = os.path.join(path, "test.desc")
+    if os.path.basename(path).startswith("partial_order_") or not os.path.isfile(desc):
+        return False
+    return parse_desc(desc) is not None and uses_pthreads(path)
+
+
+def collect(paths):
     tests = []
-    for suite in suites:
-        for name in sorted(os.listdir(suite)):
-            test_dir = os.path.join(suite, name)
-            desc = os.path.join(test_dir, "test.desc")
-            if name.startswith("partial_order_") or not os.path.isfile(desc):
-                continue
-            if parse_desc(desc) and uses_pthreads(test_dir):
-                tests.append(test_dir)
+    for path in paths:
+        entries = [path] if path.endswith(".yml") else [
+            os.path.join(path, name) for name in sorted(os.listdir(path))
+        ]
+        tests += [entry for entry in entries if wanted(entry)]
     return tests
 
 
@@ -135,6 +168,12 @@ def print_rejections(results):
         print(f"  {count:4d}  {reason}")
 
 
+def print_wrong(results):
+    for label, index in (("default", 3), ("--partial-order", 4)):
+        wrong = sum(1 for r in results if r[index][0] in DECIDED and r[2] and r[index][0] != r[2])
+        print(f"{label}: {wrong} verdicts contradict the expected one")
+
+
 def summarise(results):
     both = [r for r in results if r[3][0] in DECIDED and r[4][0] in DECIDED]
     disagree = [r for r in both if r[3][0] != r[4][0]]
@@ -146,6 +185,7 @@ def summarise(results):
     if both:
         print_median_times(both)
     print_rejections(results)
+    print_wrong(results)
     for test_dir, level, expected, default, partial in disagree:
         print(f"DISAGREE {test_dir} ({level}, expects {expected}): "
               f"default {default[0]}, --partial-order {partial[0]}")
@@ -159,12 +199,12 @@ def main():
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     parser.add_argument("--csv")
     parser.add_argument("--extra-args", default="")
-    parser.add_argument("suites", nargs="+")
+    parser.add_argument("paths", nargs="+")
     opts = parser.parse_args()
 
     esbmc = os.path.abspath(opts.esbmc) if os.sep in opts.esbmc else opts.esbmc
     extra = " " + opts.extra_args if opts.extra_args else ""
-    jobs = [(esbmc, t, opts.timeout, extra) for t in collect(opts.suites)]
+    jobs = [(esbmc, t, opts.timeout, extra) for t in collect(opts.paths)]
     with mp.Pool(opts.jobs) as pool:
         results = sorted(pool.imap_unordered(compare, jobs))
 
