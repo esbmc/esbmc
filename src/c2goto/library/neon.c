@@ -1,4 +1,5 @@
-/* Operational models of clang's AArch64 NEON load/store builtins.
+/* Operational models of clang's AArch64 NEON builtins: loads and stores, lane
+ * gets and sets, min/max and bitwise select.
  *
  * arm_neon.h lowers vld1q_u8, vst2_f32 and the rest to type-generic
  * __builtin_neon_* calls whose last argument is clang's NeonTypeFlags code:
@@ -249,3 +250,148 @@ __ESBMC_NEON_STORE3(vst3_v, __esbmc_neon_d, 1)
 __ESBMC_NEON_STORE3(vst3q_v, __esbmc_neon_q, 1)
 __ESBMC_NEON_STORE4(vst4_v, __esbmc_neon_d, 1)
 __ESBMC_NEON_STORE4(vst4q_v, __esbmc_neon_q, 1)
+
+/* vget_lane_u8, vsetq_lane_f32 and the rest lower to one builtin per lane
+ * size, with the vector and the scalar typed as in clang's prototype. clang
+ * has already checked that the lane is a constant in range. */
+#define __ESBMC_NEON_LANE_GET_SET(q, t, R, T, W)                               \
+  typedef T __esbmc_neon_##q##t __attribute__((vector_size(W)));               \
+  R __ESBMC_neon_vget##q##_lane_##t(__esbmc_neon_##q##t v, int lane)           \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return v[lane];                                                            \
+  }                                                                            \
+  __esbmc_neon_##q##t __ESBMC_neon_vset##q##_lane_##t(                         \
+    T x, __esbmc_neon_##q##t v, int lane)                                      \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    v[lane] = x;                                                               \
+    return v;                                                                  \
+  }
+
+__ESBMC_NEON_LANE_GET_SET(, i8, unsigned char, signed char, 8)
+__ESBMC_NEON_LANE_GET_SET(q, i8, unsigned char, signed char, 16)
+__ESBMC_NEON_LANE_GET_SET(, i16, unsigned short, short, 8)
+__ESBMC_NEON_LANE_GET_SET(q, i16, unsigned short, short, 16)
+__ESBMC_NEON_LANE_GET_SET(, i32, unsigned int, int, 8)
+__ESBMC_NEON_LANE_GET_SET(q, i32, unsigned int, int, 16)
+__ESBMC_NEON_LANE_GET_SET(, i64, uint64_t, int64_t, 8)
+__ESBMC_NEON_LANE_GET_SET(q, i64, uint64_t, int64_t, 16)
+__ESBMC_NEON_LANE_GET_SET(, f32, float, float, 8)
+__ESBMC_NEON_LANE_GET_SET(q, f32, float, float, 16)
+__ESBMC_NEON_LANE_GET_SET(, f64, double, double, 8)
+__ESBMC_NEON_LANE_GET_SET(q, f64, double, double, 16)
+
+/* Lane j of the result is the larger (max) or smaller lane j of x and y. A
+ * float lane follows FMAX and FMIN: a NaN in either lane gives a NaN, and of
+ * two equal lanes, which differ at most in the sign of zero, max takes the
+ * one with a clear sign bit and min the one with a set sign bit. */
+#define __ESBMC_NEON_MINMAX_LANE(j)                                            \
+  if ((j) < lanes)                                                             \
+  {                                                                            \
+    if (x[j] != x[j] || y[j] != y[j])                                          \
+      z[j] = x[j] + y[j];                                                      \
+    else if (x[j] == y[j])                                                     \
+      z[j] = (max == !!__builtin_signbit(x[j])) ? y[j] : x[j];                 \
+    else                                                                       \
+      z[j] = (max ? x[j] > y[j] : x[j] < y[j]) ? x[j] : y[j];                  \
+  }
+#define __ESBMC_NEON_INT_MINMAX_LANE(j)                                        \
+  if ((j) < lanes)                                                             \
+    z[j] = (max ? x[j] > y[j] : x[j] < y[j]) ? x[j] : y[j];
+
+#define __ESBMC_NEON_MINMAX_W(T, W, LANE)                                      \
+  {                                                                            \
+    typedef T V __attribute__((vector_size(W)));                               \
+    typedef signed char Q __attribute__((vector_size(W)));                     \
+    int lanes = W / sizeof(T);                                                 \
+    V x = __builtin_bit_cast(V, *(Q *)a), y = __builtin_bit_cast(V, *(Q *)b);  \
+    V z;                                                                       \
+    __ESBMC_NEON_REP16(LANE, 0)                                                \
+    *(Q *)r = __builtin_bit_cast(Q, z);                                        \
+  }
+
+#define __ESBMC_NEON_MINMAX(T, LANE)                                           \
+  {                                                                            \
+    if (type & 0x20)                                                           \
+      __ESBMC_NEON_MINMAX_W(T, 16, LANE)                                       \
+    else                                                                       \
+      __ESBMC_NEON_MINMAX_W(T, 8, LANE)                                        \
+  }
+
+/* Write to r the lane-wise maximum, or minimum, of the vectors at a and b. */
+void __ESBMC_neon_minmax(
+  void *r,
+  const void *a,
+  const void *b,
+  int type,
+  int max)
+{
+__ESBMC_HIDE:;
+  int is_unsigned = type & 0x10;
+  switch (type & 0xf)
+  {
+  case 0: /* Int8 */
+    if (is_unsigned)
+      __ESBMC_NEON_MINMAX(uint8_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    else
+      __ESBMC_NEON_MINMAX(int8_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    break;
+  case 1: /* Int16 */
+    if (is_unsigned)
+      __ESBMC_NEON_MINMAX(uint16_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    else
+      __ESBMC_NEON_MINMAX(int16_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    break;
+  case 2: /* Int32 */
+    if (is_unsigned)
+      __ESBMC_NEON_MINMAX(uint32_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    else
+      __ESBMC_NEON_MINMAX(int32_t, __ESBMC_NEON_INT_MINMAX_LANE)
+    break;
+  case 9: /* Float32 */
+    __ESBMC_NEON_MINMAX(float, __ESBMC_NEON_MINMAX_LANE)
+    break;
+  case 10: /* Float64 */
+    __ESBMC_NEON_MINMAX(double, __ESBMC_NEON_MINMAX_LANE)
+    break;
+  default:
+    __ESBMC_assert(0, "unsupported NEON element type");
+  }
+}
+
+#define __ESBMC_NEON_MINMAX_FN(name, V, max)                                   \
+  V __ESBMC_neon_##name(V a, V b, int type)                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    V r;                                                                       \
+    __ESBMC_neon_minmax(&r, &a, &b, type, max);                                \
+    return r;                                                                  \
+  }
+
+__ESBMC_NEON_MINMAX_FN(vmax_v, __esbmc_neon_d, 1)
+__ESBMC_NEON_MINMAX_FN(vmaxq_v, __esbmc_neon_q, 1)
+__ESBMC_NEON_MINMAX_FN(vmin_v, __esbmc_neon_d, 0)
+__ESBMC_NEON_MINMAX_FN(vminq_v, __esbmc_neon_q, 0)
+
+/* vbslq_u8 and the rest pick each bit from a where the mask m is set and from
+ * b where it is clear, whatever the element type. */
+__esbmc_neon_d __ESBMC_neon_vbsl_v(
+  __esbmc_neon_d m,
+  __esbmc_neon_d a,
+  __esbmc_neon_d b,
+  int type)
+{
+__ESBMC_HIDE:;
+  return (m & a) | (~m & b);
+}
+
+__esbmc_neon_q __ESBMC_neon_vbslq_v(
+  __esbmc_neon_q m,
+  __esbmc_neon_q a,
+  __esbmc_neon_q b,
+  int type)
+{
+__ESBMC_HIDE:;
+  return (m & a) | (~m & b);
+}
