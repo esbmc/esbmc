@@ -13,3 +13,4 @@ new_unit_test(exception-typeid-test "exception_typeid.test.cpp" "test_goto_facto
 new_unit_test(remove-sideeffects-irep2-test "remove_sideeffects_irep2.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(invariant-synthesis-predicates-test "invariant_synthesis_predicates.test.cpp" "mode_table_obj;gotoprograms;gotoalgorithms;langapi")
 new_unit_test(native-expression-code-operand-test "native_expression_code_operand.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(native-delegated-code-test "native_delegated_code.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
