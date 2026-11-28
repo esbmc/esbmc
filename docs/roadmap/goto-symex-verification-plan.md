@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status (2026-10-01, `791ed8d1b8`):** **M0–M9 closed** as milestones (§10).
+**Status (2026-11-28; body last revised 2026-10-01, `791ed8d1b8`):** **M0–M9 closed** as milestones (§10).
 "§15 M9 (…)" has since become the running defect log: every soundness fix adds
 a §9.2 row and a §15 entry under that heading, and the register now runs to
 R75. §6.4 records the tier-ordering rule M1 produced. Except where §15 records a discharged
@@ -12803,6 +12803,14 @@ were `expr2t::clone`. §15 M9 (R149) met the same detach-on-read in
 no result. It is a constant factor and does not remove Q1's quadratic, but it
 is the smallest change here and makes Q1's before/after numbers easier to
 read, so do it first.
+
+**Done (2026-11-28).** The three read-only walks in `irep2_guard.cpp` now go
+through `std::as_const`. Measured on Linux x86-64, RelWithDebInfo, Z3, `scalbrk`
+(§16.6) with `--unwind N --no-unwinding-assertions --program-only`, three runs
+each, symex time before / after: N = 400 0.42 / 0.41 s, N = 800 1.7 to 2.1 /
+1.7 to 2.1 s. The difference is inside run-to-run noise, so the clone is not
+a visible cost in this build, and Q1's before/after numbers are no easier to
+read for it. Assignment counts are unchanged (5,616 and 11,216).
 
 #### Q3. Every phi walks its guard three more times (P1, symex)
 
