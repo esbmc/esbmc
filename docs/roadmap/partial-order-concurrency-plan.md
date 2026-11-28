@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-27):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
+**Status (2026-11-28):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -16,10 +16,10 @@ write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread, and a join on a
 thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
-event count needs, and Z3 is faster still with `--ir`. Loop guards are not
-pruned by the interval domain, which would carry one thread's writes into
-the next. `--incremental-bmc` and `--falsification` raise its unwinding
-bound. The effort figures are estimates.
+event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
+run. Loop guards are not pruned by the interval domain, which would carry one
+thread's writes into the next. `--incremental-bmc` and `--falsification`
+raise its unwinding bound. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -27,7 +27,7 @@ bound. The effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-27.
+**Last updated:** 2026-11-28.
 
 ## 1. Goal
 
@@ -281,7 +281,7 @@ value per event and a stop time above them all. With Z3 (one core,
 mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
 `esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
 total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
-narrow clocks under Bitwuzla are not measured yet.
+narrow clocks under Bitwuzla are measured below.
 
 Rerun with narrow clocks (Z3 4.13.3, 20 s each, 2026-11-27), the comparison
 decides 211 tests in both modes and finds two more disagreements.
@@ -307,6 +307,26 @@ from 3 with the mutex. On `esbmc-unix{,2}` both encodings give the same
 verdicts; on the 212 tests `--partial-order` decides with both, it takes
 58.7 s in total with `--ir` against 72.7 s with bitvectors.
 `03_microbenchmark` runs out of memory with `--ir` instead of timing out.
+
+Narrow clocks under Bitwuzla (Bitwuzla 0.9.0 and Z3 4.8.12 in one build, two
+runs at a time on four cores, 2026-11-28). On the same counters, for 2, 3, 4,
+5, 6 and 8 threads, `--partial-order --bitwuzla` takes 0.3, 0.3, 0.7, 1.9,
+5.1 and >120 s with atomic sections and 0.3, 0.4, 0.5, 2.6, 8.1 and >120 s
+with the mutex. Z3 on the same build takes 0.2, 0.3, 0.5, 4.5, 21.2 and
+>120 s, and 0.3, 0.3, 0.7, 15.1, 67.1 and >120 s; with `--ir`, 0.2, 0.3,
+0.3, 0.3, 0.8 and 62.2 s, and 0.2, 0.3, 0.3, 0.3, 0.7 and 35.9 s. The default
+with Bitwuzla takes 0.4 and 6.9 s for 2 and 3 threads with atomic sections
+and 2.3 s for 2 with the mutex, and passes 120 s beyond. Every variant
+without the last join is FAILED in under 1.5 s. So narrow clocks help
+Bitwuzla as they helped Z3, and Bitwuzla stays ahead of Z3 on bitvectors
+from 5 threads; Z3 with `--ir` is fastest of all, and `--ir` rejects
+`--bitwuzla`. On `esbmc-unix{,2}` (20 s each) with Bitwuzla,
+`--partial-order` decides 219 tests and both modes decide 218, which take
+71.7 s in total under `--partial-order` against 135.3 s under the default.
+The 7 disagreements are the 6 semantic differences above and
+`11_bluetooth`. `--partial-order` times out on `03_wronglock_01`, which the
+default decides in 1.7 s, still runs out of memory on `03_microbenchmark`,
+and decides `02_phase_02` in 0.3 s, where the default times out.
 
 `--partial-order` runs under `--incremental-bmc` and `--falsification`: each
 bound is one `--partial-order` run, and the forward condition proves the
