@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --unwind 101
+^WARNING: loop invariant at .* not checked beyond its base case: a jump from outside the loop enters it past its head, bypassing the havoc$
+^VERIFICATION FAILED$
