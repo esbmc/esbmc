@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 16001 --no-summarize-array-loops
+^VERIFICATION FAILED$
+^  assertion a\[i\] == i$

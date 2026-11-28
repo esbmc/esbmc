@@ -1078,6 +1078,20 @@ expr2tc goto_symex_statet::pin_symbolic_updates(
   return is_nil_expr(pinned) ? split_literal_chain(*this, rhs, l2_lhs) : pinned;
 }
 
+/// constant_propagation of @p rhs, an array write over the chain @p state
+/// already carries for its object. Only the newest update can change the
+/// verdict, unless it is one array_with_chain_may_propagate counts or bounds.
+static bool
+extension_propagates(const goto_symex_statet &state, const expr2tc &rhs)
+{
+  const with2t &w = to_with2t(rhs);
+  if (
+    to_array_type(rhs->type).size_is_infinite ||
+    !state.constant_propagation(w.update_value))
+    return state.constant_propagation(rhs);
+  return !incremental_strategy_active();
+}
+
 bool goto_symex_statet::constant_propagation_reference(
   const expr2tc &expr) const
 {
@@ -1099,15 +1113,35 @@ bool goto_symex_statet::constant_propagation_reference(
   return false;
 }
 
+/// Whether @p rhs is an array write over the chain @p state carries for
+/// @p l1_lhs. Identity, not ==, which on distinct nodes would walk the chain.
+static bool extends_carried_chain(
+  const goto_symex_statet &state,
+  const expr2tc &l1_lhs,
+  const expr2tc &rhs)
+{
+  if (!is_with2t(rhs) || !is_array_type(rhs))
+    return false;
+  const expr2tc carried =
+    state.level2
+      .current_value(renaming::level2t::name_record(to_symbol2t(l1_lhs)))
+      .constant;
+  return to_with2t(rhs).source_value.get() == carried.get();
+}
+
 /// The value reads of @p lhs fold to once it is assigned @p rhs, nil for none,
 /// with the @p updates to carry over the name it defines instead.
+/// @p extends_carried: @p rhs extends @p lhs's carried array chain.
 static expr2tc propagated_value(
   const goto_symex_statet &state,
   const expr2tc &lhs,
   const expr2tc &rhs,
+  bool extends_carried,
   std::vector<const with2t *> &updates)
 {
-  if (!state.constant_propagation(rhs))
+  if (
+    extends_carried ? !extension_propagates(state, rhs)
+                    : !state.constant_propagation(rhs))
     return expr2tc();
   updates = split_chain_updates(state, rhs, lhs);
   if (updates.empty() && exposes_foreign_pointer(rhs, to_symbol2t(lhs)))
@@ -1139,9 +1173,15 @@ void goto_symex_statet::assignment(
 
   expr2tc l1_lhs = lhs;
 
+  // A write into a carried array extends the chain the object already carries.
+  // That chain was accepted, and its writes reached the object's value set,
+  // when it was assigned, so only the newest update needs looking at:
+  // re-walking the chain made a loop of N writes quadratic in symex.
+  const bool extends_carried = extends_carried_chain(*this, l1_lhs, rhs);
   std::vector<const with2t *> updates;
   expr2tc const_value =
-    propagate ? propagated_value(*this, lhs, rhs, updates) : expr2tc();
+    propagate ? propagated_value(*this, lhs, rhs, extends_carried, updates)
+              : expr2tc();
   level2.make_assignment(lhs, updates.empty() ? const_value : expr2tc(), rhs);
   // The same updates over the name just defined, which they hold on.
   if (!updates.empty())
@@ -1170,7 +1210,7 @@ void goto_symex_statet::assignment(
   if (use_value_set && update_value_set)
   {
     // update value sets
-    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);
+    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs, extends_carried);
     level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
@@ -1193,25 +1233,34 @@ static bool has_symbolic_array_size(const type2tc &type)
 /* A propagated array write carries every earlier write to the same object
  * under its top-level `with`. Those earlier values are already in the L1
  * object's value set, so only the newest update is new: re-walking the chain
- * per write made long Python list builds quadratic (#8090). */
+ * per write made long Python list builds quadratic (#8090). When the write
+ * @p extends_carried, the chain is the one this object carries, so its base
+ * need not be found. */
 expr2tc goto_symex_statet::shallow_array_update(
   const expr2tc &rhs,
-  const expr2tc &l1_lhs) const
+  const expr2tc &l1_lhs,
+  bool extends_carried) const
 {
   if (!is_with2t(rhs) || !is_array_type(rhs))
     return rhs;
 
   const with2t &top_write = to_with2t(rhs);
-  const expr2tc *base = &top_write.source_value;
-  while (is_with2t(*base))
-    base = &to_with2t(*base).source_value;
-  if (!is_symbol2t(*base) || is_symbol2t(top_write.source_value))
+  if (is_symbol2t(top_write.source_value))
     return rhs;
 
-  expr2tc l1_base = *base;
-  level2.get_original_name(l1_base);
-  if (l1_base != l1_lhs)
-    return rhs;
+  if (!extends_carried)
+  {
+    const expr2tc *base = &top_write.source_value;
+    while (is_with2t(*base))
+      base = &to_with2t(*base).source_value;
+    if (!is_symbol2t(*base))
+      return rhs;
+
+    expr2tc l1_base = *base;
+    level2.get_original_name(l1_base);
+    if (l1_base != l1_lhs)
+      return rhs;
+  }
 
   return with2tc(
     rhs->type, l1_lhs, top_write.update_field, top_write.update_value);
@@ -1459,14 +1508,17 @@ void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
 {
-  if (is_code_type(orig_type) || is_code_type(expr->type))
+  // Read through const: a non-const expr-> detaches a shared node, and a
+  // carried array value must keep its identity (extends_carried).
+  const type2tc &renamed_type = std::as_const(expr)->type;
+  if (is_code_type(orig_type) || is_code_type(renamed_type))
   {
     return;
   }
   // Empty (void) types have no width; the scalar-vs-scalar width comparison
   // below would otherwise throw symbolic_type_excp from get_width(). No
   // fix-up is meaningful for void values, so bail out.
-  if (is_empty_type(orig_type) || is_empty_type(expr->type))
+  if (is_empty_type(orig_type) || is_empty_type(renamed_type))
   {
     return;
   }
@@ -1476,7 +1528,7 @@ void goto_symex_statet::fixup_renamed_type(
 
     // Grab pointer types
     const pointer_type2t &orig = to_pointer_type(orig_type);
-    const pointer_type2t &newtype = to_pointer_type(expr->type);
+    const pointer_type2t &newtype = to_pointer_type(renamed_type);
 
     type2tc origsubtype = orig.subtype;
     type2tc newsubtype = newtype.subtype;
@@ -1500,15 +1552,15 @@ void goto_symex_statet::fixup_renamed_type(
     if (!origsize || !newsize || *origsize != *newsize)
       expr = typecast2tc(orig_type, expr);
   }
-  else if (is_scalar_type(orig_type) && is_scalar_type(expr->type))
+  else if (is_scalar_type(orig_type) && is_scalar_type(renamed_type))
   {
     // If we're a BV and have changed size, then we're quite likely to cause
     // an SMT problem later on. Immediately cast. Also if we've gratuitously
     // changed sign.
     if (
-      orig_type->get_width() != expr->type->get_width() ||
-      (is_bv_type(orig_type) && is_bv_type(expr->type) &&
-       orig_type->type_id != expr->type->type_id))
+      orig_type->get_width() != renamed_type->get_width() ||
+      (is_bv_type(orig_type) && is_bv_type(renamed_type) &&
+       orig_type->type_id != renamed_type->type_id))
     {
       expr = typecast2tc(orig_type, expr);
     }
