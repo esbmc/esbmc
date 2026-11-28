@@ -1,0 +1,5 @@
+CORE
+main.c
+
+REQUIRES arm_neon
+^VERIFICATION SUCCESSFUL$

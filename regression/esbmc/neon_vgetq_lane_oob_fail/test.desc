@@ -1,0 +1,6 @@
+CORE
+main.c
+
+REQUIRES arm_neon
+^VERIFICATION FAILED$
+^  array bounds violated: array `table' upper bound$
