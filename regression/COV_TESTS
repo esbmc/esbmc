@@ -2486,6 +2486,11 @@ regression/esbmc-unix/partial_order_sv_comp
 regression/esbmc-unix/partial_order_sv_comp_fail
 regression/esbmc-unix/partial_order_sv_comp_guard
 regression/esbmc-unix/partial_order_sv_comp_guard_fail
+regression/esbmc-unix/partial_order_thread_arg_value
+regression/esbmc-unix/partial_order_thread_arg_value_fail
+regression/esbmc-unix/partial_order_thread_arg_global
+regression/esbmc-unix/partial_order_thread_arg_global_fail
+regression/esbmc-unix/partial_order_reject_thread_arg_pointer
 regression/esbmc-unix/pthread_once
 regression/esbmc-unix/pthread_once_norace
 regression/esbmc-unix/pthread_once_race_fail

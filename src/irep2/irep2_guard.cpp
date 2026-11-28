@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 #include <unordered_set>
 #include <vector>
 #include <irep2/irep2_guard.h>
@@ -77,19 +78,19 @@ std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
     std::size_t da = n1, db = n2;
     while (da > db && is_and2t(a))
     {
-      a = to_and2t(a).side_1;
+      a = to_and2t(std::as_const(a)).side_1;
       --da;
     }
     while (db > da && is_and2t(b))
     {
-      b = to_and2t(b).side_1;
+      b = to_and2t(std::as_const(b)).side_1;
       --db;
     }
     // da == db now (the common depth). Lockstep until the nodes coincide.
     while (!same_pointer(a, b) && is_and2t(a) && is_and2t(b))
     {
-      a = to_and2t(a).side_1;
-      b = to_and2t(b).side_1;
+      a = to_and2t(std::as_const(a)).side_1;
+      b = to_and2t(std::as_const(b)).side_1;
       --da;
     }
     // Only a same_pointer convergence confirms a shared conjunct prefix; a
@@ -155,7 +156,7 @@ bool cached_prefix_expr(
   {
     if (!is_and2t(cur))
       return false;
-    cur = to_and2t(cur).side_1;
+    cur = to_and2t(std::as_const(cur)).side_1;
   }
 
   if (!same_pointer(cur, prefix))
@@ -192,7 +193,7 @@ bool cached_prefix_expr_at(
   {
     if (!is_and2t(cur))
       return false;
-    cur = to_and2t(cur).side_1;
+    cur = to_and2t(std::as_const(cur)).side_1;
   }
 
   prefix_expr = cur;

@@ -1049,3 +1049,41 @@ TEST_CASE("a thread halted in an atomic section keeps others out", "[po]")
   v[clock(0)] = tick(4);
   CHECK(all_hold(eq, v));
 }
+
+TEST_CASE("a struct read has its write's value field by field", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const type2tc st = struct_type2tc(
+    std::vector<type2tc>{get_int32_type(), get_int32_type()},
+    std::vector<irep_idt>{"a", "b"},
+    std::vector<irep_idt>{"a", "b"},
+    "tag-struct s");
+  auto s = [&](unsigned version) {
+    return symbol2tc(
+      st, "c:@s", symbol2t::renaming_level::level2_global, 0, version);
+  };
+  add_event(eq, 0, symex_targett::SHARED_WRITE, s(1));
+  add_event(eq, 1, symex_targett::SHARED_READ, s(2));
+  memory_model_sct().run(eq.SSA_steps);
+
+  std::function<bool(const expr2tc &)> struct_equality = [&](const expr2tc &e) {
+    if (is_nil_expr(e))
+      return false;
+    if (is_equality2t(e) && is_struct_type(to_equality2t(e).side_1))
+      return true;
+    bool found = false;
+    e->foreach_operand(
+      [&](const expr2tc &op) { found = found || struct_equality(op); });
+    return found;
+  };
+  const expr2tc field_b = member2tc(get_int32_type(), s(2), "b");
+  bool reads_b = false;
+  for (const auto &step : eq.SSA_steps)
+  {
+    CHECK_FALSE(struct_equality(step.cond));
+    reads_b = reads_b || mentions(step.cond, field_b);
+  }
+  CHECK(reads_b);
+}

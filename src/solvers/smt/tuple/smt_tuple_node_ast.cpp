@@ -104,8 +104,14 @@ void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
   tuple_node_smt_astt target = to_tuple_node_ast(sym);
-  assert(
-    target->elements.size() == 0 && "tuple smt assign with elems populated");
+
+  // A symbol used before its defining assignment, as in the order constraints
+  // --partial-order prepends, already has elements that formulas refer to.
+  if (!target->elements.empty())
+  {
+    ctx->assert_ast(eq(ctx, sym));
+    return;
+  }
 
   tuple_node_smt_ast *destination = const_cast<tuple_node_smt_ast *>(target);
 
