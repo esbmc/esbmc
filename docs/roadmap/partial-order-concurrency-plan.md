@@ -15,8 +15,10 @@ one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
-event count needs. `--incremental-bmc` and `--falsification` raise its
-unwinding bound. The effort figures are estimates.
+event count needs, and Z3 is faster still with `--ir`. Loop guards are not
+pruned by the interval domain, which would carry one thread's writes into
+the next. `--incremental-bmc` and `--falsification` raise its unwinding
+bound. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -278,7 +280,32 @@ value per event and a stop time above them all. With Z3 (one core,
 mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
 `esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
 total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
-narrow clocks under Bitwuzla, and integer clocks, are not measured yet.
+narrow clocks under Bitwuzla are not measured yet.
+
+Rerun with narrow clocks (Z3 4.13.3, 20 s each, 2026-11-27), the comparison
+decides 211 tests in both modes and finds two more disagreements.
+`esbmc-unix2/11_dekker` was a false alarm: symex runs the threads in turn,
+and the online interval domain that prunes loop guards carried thread 1's
+last write, `flag1 = 0`, into thread 2's loop guard, so thread 2 skipped its
+wait loop. Fixed: that pruning is off under `--partial-order`, and
+`--interval-symex-assert`, which prunes claims with the same domain, is
+rejected (`partial_order_loop_guard*`). `esbmc-unix2/11_bluetooth` runs the
+default at `--context-bound 2`; without the bound, or at 4, the default is
+FAILED too.
+
+Integer clocks. `--ir` makes every bitvector an integer, the program's own
+data included, so it measures integer clocks only together with integer
+data. On the §2 counters (thread ids in an array, Z3, 120 s), for 2, 3, 4,
+5, 6 and 8 threads, `--partial-order --ir` takes 0.3, 0.2, 0.2, 0.3, 0.8 and
+68.2 s with atomic sections, against 0.3, 0.3, 0.4, 4.5, 19.6 and >120 s
+with bitvector clocks, and 0.3, 0.2, 0.3, 0.3, 0.5 and 31.3 s with the mutex,
+against 0.3, 0.5, 0.6, 17.4, 76.2 and >120 s. Variants without the last join
+are FAILED in under 0.5 s with either encoding. `--ir` does not change the
+default's times, which pass 120 s from 4 threads with atomic sections and
+from 3 with the mutex. On `esbmc-unix{,2}` both encodings give the same
+verdicts; on the 212 tests `--partial-order` decides with both, it takes
+58.7 s in total with `--ir` against 72.7 s with bitvectors.
+`03_microbenchmark` runs out of memory with `--ir` instead of timing out.
 
 `--partial-order` runs under `--incremental-bmc` and `--falsification`: each
 bound is one `--partial-order` run, and the forward condition proves the
