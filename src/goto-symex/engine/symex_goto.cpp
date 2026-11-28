@@ -759,8 +759,9 @@ static bool chain_over_own_name(const expr2tc &value, const expr2tc &lhs)
          to_symbol2t(*base).level1_num == to_symbol2t(lhs).level1_num;
 }
 
-// The guard is already simplified and the arms are bare symbols, so only the
-// node itself can fold; a full walk would revisit the guard.
+// Folds only the node, so a phi no longer re-walks the merge guard (an
+// unsimplified and-chain). A fold that needed the guard simplified first is
+// missed; the if2t left in its place is equivalent.
 static void simplify_phi_node(expr2tc &rhs)
 {
   expr2tc folded = rhs->do_simplify();
