@@ -1,0 +1,6 @@
+CORE
+main.c
+
+REQUIRES arm_neon
+^VERIFICATION FAILED$
+^  dereference failure: array bounds violated$

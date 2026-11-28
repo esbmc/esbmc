@@ -332,6 +332,10 @@ DYNAMIC_CAPABILITY_PROBES = {
     "mfp8": {
         "source": "__mfp8 m; int main() { return 0; }\n",
     },
+    # clang's <arm_neon.h> parses, which it does only for an Arm target.
+    "arm_neon": {
+        "source": "#include <arm_neon.h>\nint main() { return 0; }\n",
+    },
     # `long double` is the x87 80-bit format (64-bit significand) rather than
     # IEEE binary128. Exact floating-point identities hold in one and not the
     # other, so a test asserting one cannot hold on both.

@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 25
+REQUIRES arm_neon
+^VERIFICATION SUCCESSFUL$
