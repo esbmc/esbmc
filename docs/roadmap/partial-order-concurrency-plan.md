@@ -363,7 +363,10 @@ default.
 which the thread receives as it was at the spawn, or a global's address, which
 the thread dereferences as any pointer to a global. A pointer that may reach
 a local is still rejected, since the thread would read the local's last value
-in its owner's run (`partial_order_thread_arg*`).
+in its owner's run (`partial_order_thread_arg*`). On the 405 SV-COMP tasks,
+no first rejection changes: the 30 tasks whose sources pass an argument other
+than NULL, 10 of them an address, are rejected earlier, 25 for a global that
+is not a scalar or an array of scalars.
 
 ## 5. Tests
 
