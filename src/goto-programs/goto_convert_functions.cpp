@@ -1312,9 +1312,8 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_for2t &f = to_code_for2t(code2);
 
-    // Every producer writes `true` for an omitted condition; convert_for would
-    // turn a nil one into the malformed guard `!nil` (frontends-to-irep2.md
-    // §31.2, §85).
+    // No producer leaves the condition nil; convert_for would turn a nil one
+    // into the malformed guard `!nil` (frontends-to-irep2.md §31.2, §85).
     if (is_nil_expr(f.cond))
     {
       log_error("for without condition");

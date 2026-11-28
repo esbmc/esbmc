@@ -4730,8 +4730,9 @@ Solidity's `ForStatement` lowering (`solidity_convert_stmt.cpp`) initialises
 `exprt cond = true_exprt();` and overwrites it only from a `condition` node, as clang-c does. The
 full producer list is `clang_c_convert.cpp` (`true` for an omitted condition, and `true` again when
 a condition variable moves into the body), `clang_cpp_convert.cpp`'s range-for (clang always
-supplies `begin != end`), Solidity, and the three builders in `builtin_functions.cpp` and the
-`cpp_delete` loop in `goto_convert.cpp`, which all write a relation. The IREP2 adjust passes
+supplies `begin != end`) and Solidity. The three builders in `builtin_functions.cpp` and the
+`cpp_delete` loop in `goto_convert.cpp` write a relation and hand the loop straight to legacy
+`convert_for`, so they never reach this arm. The IREP2 adjust passes
 (`clang_c_adjust_irep2.cpp`, `python_adjust.cpp`) rebuild a `code_for2t` from the operand they were
 given, and `migrate_expr` turns a nil `exprt` into a nil `expr2tc`, so none of them creates one.
 
@@ -4749,6 +4750,8 @@ The one signal exit is `jimple/github_4715_identity_crash_01`, a KNOWNBUG that p
 As in §84, no regression test can tell the two binaries apart: no frontend produces the input, and
 the abort ends the process.
 
-Next in Phase 1 is §31.3, the expression-statement code operand, the last origin site. It is the
+Next in Phase 1 is §31.3, the expression-statement code operand, the last of §31's five origin
+sites. Two other `return false` lines (an empty do-while body, and the default arm for an
+unsupported statement kind) are outside §31's accounting and still need their own argument. It is the
 open-ended one (`op.statement() != "cpp-throw"`) and needs a producer survey of its own. A Solidity
 decline census of the whole dispatcher follows it.
