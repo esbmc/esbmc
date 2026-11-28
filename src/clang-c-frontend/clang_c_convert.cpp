@@ -4169,7 +4169,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // A call returning T& or T&& converts to a pointer flagged as a
     // reference; the bits to reinterpret are those of the referenced object.
     if (is_lvalue_or_rvalue_reference(new_expr.type()))
-      new_expr = dereference_exprt(new_expr, new_expr.type().subtype());
+      new_expr = dereference_exprt(new_expr, new_expr.type());
 
     // __builtin_bit_cast / std::bit_cast must reinterpret the value's
     // byte-level representation, NOT perform an arithmetic conversion.  Using
