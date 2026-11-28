@@ -1046,24 +1046,34 @@ expr2tc strip_lvalue_casts(expr2tc lhs)
   return lhs;
 }
 
-/// The array an assignment to \p lhs writes an element of, or nil.
-expr2tc assigned_array(const expr2tc &full_lhs)
+bool is_part_of(const expr2tc &e)
+{
+  return is_index2t(e) || is_member2t(e);
+}
+
+/// The array or struct that the element or field \p e is part of.
+expr2tc whole_object(expr2tc e)
+{
+  while (is_part_of(e))
+    e =
+      is_index2t(e) ? to_index2t(e).source_value : to_member2t(e).source_value;
+  return e;
+}
+
+/// The array or struct an assignment to \p lhs writes part of, or nil.
+expr2tc assigned_aggregate(const expr2tc &full_lhs)
 {
   const expr2tc lhs = strip_lvalue_casts(full_lhs);
-  if (!is_index2t(lhs))
+  if (!is_part_of(lhs))
     return expr2tc();
-  expr2tc root = lhs;
-  while (is_index2t(root))
-    root = to_index2t(root).source_value;
+  const expr2tc root = whole_object(lhs);
   return is_symbol2t(root) ? root : expr2tc();
 }
 
 /// The pointer an assignment to \p lhs writes through, or nil.
 expr2tc assigned_pointer(expr2tc lhs)
 {
-  lhs = strip_lvalue_casts(lhs);
-  while (is_index2t(lhs))
-    lhs = to_index2t(lhs).source_value;
+  lhs = whole_object(strip_lvalue_casts(lhs));
   return is_dereference2t(lhs) ? to_dereference2t(lhs).value : expr2tc();
 }
 
@@ -1094,6 +1104,8 @@ void partial_order_reads(
       walk(to_index2t(e).index);
       walk_lvalue(to_index2t(e).source_value);
     }
+    else if (is_member2t(e))
+      walk_lvalue(to_member2t(e).source_value);
     else if (is_dereference2t(e))
       walk(to_dereference2t(e).value);
     else if (!is_symbol2t(e))
@@ -1168,9 +1180,7 @@ std::set<expr2tc> execution_statet::shared_pointees(const expr2tc &ptr)
   {
     if (!is_object_descriptor2t(obj))
       continue;
-    expr2tc root = to_object_descriptor2t(obj).object;
-    while (is_index2t(root))
-      root = to_index2t(root).source_value;
+    const expr2tc root = whole_object(to_object_descriptor2t(obj).object);
     if (!is_symbol2t(root))
       continue;
     const expr2tc sym = symbol2tc(root->type, to_symbol2t(root).thename);
@@ -1195,9 +1205,9 @@ bool execution_statet::partial_order_update(
 {
   const code_assign2t &assign = to_code_assign2t(code);
   std::set<expr2tc> written;
-  const expr2tc array = assigned_array(assign.target);
-  if (!is_nil_expr(array) && is_partial_order_event_symbol(array, ns))
-    written.insert(array);
+  const expr2tc aggregate = assigned_aggregate(assign.target);
+  if (!is_nil_expr(aggregate) && is_partial_order_event_symbol(aggregate, ns))
+    written.insert(aggregate);
   const expr2tc pointer = assigned_pointer(assign.target);
   if (!is_nil_expr(pointer))
     written = shared_pointees(pointer);
@@ -1220,6 +1230,8 @@ bool execution_statet::partial_order_update(
       if (!is_constant_int2t(index.index))
         index.index = materialise_old_snapshot(index.index, guard);
     }
+    else if (is_member2t(e))
+      snapshot_operands(to_member2t(e).source_value);
     else if (is_dereference2t(e) && !is_symbol2t(to_dereference2t(e).value))
       to_dereference2t(e).value =
         materialise_old_snapshot(to_dereference2t(e).value, guard);
