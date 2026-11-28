@@ -3955,6 +3955,11 @@ void clang_cpp_convertert::get_base_components_methods(
       // inheritance behaves exactly as before (P5). See #1866, #3894.
       for (auto component : base_type.components())
       {
+        // The base's own ancestors are already flattened through base_map; a
+        // nested copy would shift every later member away from the offsets
+        // the base's constructor writes to.
+        if (component.get_bool("is_base_subobject"))
+          continue;
         component.set("from_base", true);
         // Which class actually declared this member. is_duplicate_component
         // merges by name alone, so two bases with a same-named member share
