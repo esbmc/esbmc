@@ -2614,7 +2614,34 @@ Constant-index array of `struct { int x, y; }`, two writes per element, Z3,
 one run each: n=8 0.13 s off, 0.12 s on; n=512 0.30 s, 0.23 s; n=2048 3.7 s,
 0.96 s.
 
-Unmet, not measured: Bitwuzla, the Python suite, the unreachability harnesses
-for the new branches (`constant_in_bounds`, `symbol_root`, the array arms of
-`split_leaves`, `whole` and `field_of`), the assert-enabled build, trace text
-diffs, and the SV-COMP run.
+Measured on 2026-11-28 on the branch merged with master `f72cfcaab` (Z3
+only, RelWithDebInfo, no assert-enabled build):
+
+- Unreachability harnesses (`--enable-unreachability-intrinsic --unwind 10`,
+  Z3, with and without the flag, 9 programs, all `VERIFICATION FAILED` in both
+  modes, i.e. the `__ESBMC_unreachable()` is reachable): constant in-bounds
+  read, write and element copy (splits 5); whole-array and element copy (8);
+  dynamic index (not split, the `symbol_root` exclusion); address taken and
+  pointer arithmetic over the array (not split); array of structs inside a
+  struct, copied whole (8); one-element array, index `n-1` (2); decayed
+  parameter (not split); a 4096-element array (split) next to a 4097-element
+  one (not).
+- Every fourth `CORE` test of `regression/esbmc` (823) and
+  `regression/esbmc-cpp/cpp` (336), flag forced on against off, 30 s per run,
+  4 parallel jobs, tests passing the flag, k-induction, parallel, witness,
+  multi-property or a non-Z3 solver skipped: 1159 tests, 415 with a split
+  object. Verdict differences: 2, `vector_reserve_unwind_invariant` and
+  `vector_reserve_realloc`, which time out at 120 s with and without the flag
+  when run alone (load made one side finish inside 30 s). 31 tests give no
+  verdict on either side (timeouts).
+- Trace text, 172 sampled tests that fail and split an object: the
+  `[Counterexample]` block differs in 18. The one inspected,
+  `github_10965_member_fail`, has no array; it is the nested-struct step
+  order change of part 1 (`t.a.p = &y` against `t = {...}`). The other 17
+  were not inspected, so this gate is not met.
+
+Not measured: Bitwuzla (not installable in the sandbox), the Python suite
+(not built; `eligible` rejects `mode == "Python"`, so the array change does
+not reach it), the assert-enabled build, the full suites, the corpus rows
+under the 2x bar for any case beyond the n=2048 one above, and the SV-COMP
+run.
