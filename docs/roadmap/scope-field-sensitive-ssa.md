@@ -2640,8 +2640,17 @@ only, RelWithDebInfo, no assert-enabled build):
   order change of part 1 (`t.a.p = &y` against `t = {...}`). The other 17
   were not inspected, so this gate is not met.
 
+Assert-enabled build, measured on 2026-11-28 on the same head (Z3 only,
+`CMAKE_BUILD_TYPE=Debug` with `-O1`, so Invariant 3's assert is live): every
+`CORE` test of `regression/esbmc`, `regression/esbmc-cpp/cpp` and
+`regression/field-sensitivity` that does not pass a solver, parallel, witness
+or the flag itself, run with `--field-sensitive-ssa` appended, 20 s per run.
+No run printed a failed assertion (the number of tests run was not recorded;
+verdicts were not compared in this run). ctest
+`field_sensitive_ssa|field-sensitivity`: 80/80 pass.
+
 Not measured: Bitwuzla (not installable in the sandbox), the Python suite
 (not built; `eligible` rejects `mode == "Python"`, so the array change does
-not reach it), the assert-enabled build, the full suites, the corpus rows
+not reach it), the full suites, the corpus rows
 under the 2x bar for any case beyond the n=2048 one above, and the SV-COMP
 run.
