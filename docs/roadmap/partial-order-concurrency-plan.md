@@ -14,7 +14,8 @@ is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
 assumption, `abort()` included, stops only its own thread, also from inside
-a callee, and a join on a thread that ends returns.
+a callee, and a join on a thread that ends returns. A thread's argument
+may be a value or a global's address.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
 event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
 run. Loop guards are not pruned by the interval domain, which would carry one
@@ -357,6 +358,12 @@ every verdict right; both decide 126 and agree on all of them. The scope
 check rejects 101, 91 for a global that is not a scalar or an array of
 scalars; 64 time out and 15 run out of memory, against 162 and 44 for the
 default.
+
+`pthread_create` passes a thread argument other than NULL if it is a value,
+which the thread receives as it was at the spawn, or a global's address, which
+the thread dereferences as any pointer to a global. A pointer that may reach
+a local is still rejected, since the thread would read the local's last value
+in its owner's run (`partial_order_thread_arg*`).
 
 ## 5. Tests
 

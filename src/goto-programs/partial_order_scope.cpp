@@ -239,8 +239,8 @@ private:
     const bool join = name.starts_with("pthread_join");
     if (!check_mutex_arg(name, call))
       return false;
-    if (create && !is_null(call.operands.at(3)))
-      return reject("a thread argument other than NULL");
+    if (create && !is_value_arg(call.operands.at(3)))
+      return reject("a thread argument that may point to a local");
     if (join && !is_null(call.operands.at(1)))
       return reject("a join result pointer other than NULL");
     // Joins are ordered by a thread id known during symex, and a global's
@@ -250,6 +250,25 @@ private:
       (join && reads_shared(call.operands.at(0))))
       return reject("a thread id stored in a global");
     return true;
+  }
+
+  /// The thread receives the argument's value at the spawn. A pointer to a
+  /// local would let it read the local's value at the end of its owner's run.
+  bool is_value_arg(expr2tc arg) const
+  {
+    while (is_typecast2t(arg))
+      arg = to_typecast2t(arg).from;
+    return is_null(arg) || is_shared_address(arg) || !has_pointer(arg);
+  }
+
+  static bool has_pointer(const expr2tc &e)
+  {
+    if (is_pointer_type(e->type) || is_address_of2t(e))
+      return true;
+    bool found = false;
+    e->foreach_operand(
+      [&found](const expr2tc &op) { found = found || has_pointer(op); });
+    return found;
   }
 
   bool check_expr(const expr2tc &e) const
