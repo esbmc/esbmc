@@ -74,6 +74,7 @@ private:
    *  after operator-= / operator|= installs a fresh list. Asserts that
    *  the base is nil (callers reset it first). */
   void build_guard_expr();
+  static guard2tc &or_by_common_conjuncts(guard2tc &g1, const guard2tc &g2);
   void set_guard_list_and_rebuild(guard_seq &&new_guard_list);
   void set_guard_list_and_base(guard_seq &&new_guard_list, const expr2tc &base);
 

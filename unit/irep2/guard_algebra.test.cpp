@@ -248,3 +248,45 @@ TEST_CASE("guard algebra sweep (H-B4)", "[core][irep2][guard]")
     check_or(g2, g1);
   }
 }
+
+TEST_CASE(
+  "guard set algebra at a loop-exit merge keeps the long guard's nodes",
+  "[core][irep2][guard]")
+{
+  config.ansi_c.word_size = 32;
+
+  guard2tc parked;
+  for (int i = 0; i < 10; ++i)
+    parked.add(sym("p" + std::to_string(i)));
+
+  guard2tc folded;
+  folded.add(or2tc(sym("x"), sym("y")));
+
+  SECTION("-= with no common conjunct returns the guard untouched")
+  {
+    guard2tc g = parked;
+    g -= folded;
+    REQUIRE(same_pointer(g, parked));
+    REQUIRE(g.guard_list == parked.guard_list);
+  }
+
+  SECTION("|= with no common conjunct wraps both chains without rebuilding")
+  {
+    guard2tc g = folded;
+    g |= parked;
+    REQUIRE(g.guard_list.size() == 1);
+    REQUIRE(is_or2t(g.guard_list[0]));
+    REQUIRE(same_pointer(to_or2t(g.guard_list[0]).side_2, parked));
+    check_or(folded, parked);
+    check_or(parked, folded);
+  }
+
+  SECTION("a structurally equal conjunct is still found")
+  {
+    guard2tc g = parked;
+    guard2tc other;
+    other.add(sym("p7")); // distinct node, equal value
+    check_minus(g, other);
+    check_or(g, other);
+  }
+}

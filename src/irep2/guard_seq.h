@@ -2,6 +2,7 @@
 #define IREP2_GUARD_SEQ_H_
 
 #include <cstddef>
+#include <immer/map.hpp>
 #include <immer/vector.hpp>
 #include <immer/memory_policy.hpp>
 #include <irep2/irep2_expr.h>
@@ -48,10 +49,20 @@ class guard_seq
     immer::unsafe_refcount_policy,
     immer::no_lock_policy>;
   using vector_t = immer::vector<expr2tc, memory_policy>;
+  // Structural hash of a conjunct -> occurrences in v_. A count, not a flag,
+  // so that prefix() can drop a hash that also occurs inside the kept prefix.
+  using index_t = immer::map<
+    std::size_t,
+    std::size_t,
+    std::hash<std::size_t>,
+    std::equal_to<std::size_t>,
+    memory_policy>;
 
   vector_t v_;
+  index_t index_;
 
-  explicit guard_seq(vector_t v) : v_(std::move(v))
+  guard_seq(vector_t v, index_t index)
+    : v_(std::move(v)), index_(std::move(index))
   {
   }
 
@@ -90,12 +101,32 @@ public:
   void push_back(const expr2tc &e)
   {
     v_ = std::move(v_).push_back(e);
+    const std::size_t h = irep2_hash()(e);
+    const std::size_t *n = index_.find(h);
+    index_ = std::move(index_).set(h, n ? *n + 1 : 1);
+  }
+
+  /** False only if no conjunct is structurally equal to `e`; true may be a
+   *  hash collision. O(log32 N). */
+  bool may_contain(const expr2tc &e) const
+  {
+    return index_.find(irep2_hash()(e)) != nullptr;
   }
 
   /** Logical prefix [0, n) — shares subtrees, no element copies. */
   guard_seq prefix(std::size_t n) const
   {
-    return guard_seq(v_.take(n));
+    if (n >= v_.size())
+      return *this;
+    index_t index = index_;
+    for (std::size_t i = n; i < v_.size(); ++i)
+    {
+      const std::size_t h = irep2_hash()(v_[i]);
+      const std::size_t c = *index.find(h);
+      index =
+        c == 1 ? std::move(index).erase(h) : std::move(index).set(h, c - 1);
+    }
+    return guard_seq(v_.take(n), std::move(index));
   }
 
   /** Logical suffix [n, size). immer::vector has no drop(), so rebuild
@@ -105,15 +136,16 @@ public:
    */
   guard_seq suffix(std::size_t n) const
   {
-    vector_t r;
+    guard_seq r;
     for (std::size_t i = n; i < v_.size(); ++i)
-      r = std::move(r).push_back(v_[i]);
-    return guard_seq(std::move(r));
+      r.push_back(v_[i]);
+    return r;
   }
 
   void clear()
   {
     v_ = vector_t{};
+    index_ = index_t{};
   }
 
   using const_iterator = vector_t::const_iterator;
