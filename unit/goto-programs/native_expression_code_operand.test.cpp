@@ -38,10 +38,15 @@ locationt line(unsigned n)
 
 // Convert `body2` natively and through the legacy converter, each with a
 // fresh converter, and require both to succeed with identical output.
-void require_native_matches_legacy(program &p, const expr2tc &body2)
+void require_native_matches_legacy(
+  program &p,
+  const expr2tc &body2,
+  bool no_assertions = false,
+  bool compare_locations = true)
 {
   cmdlinet cmd = goto_factory::get_default_cmdline("test.c");
   optionst opts = goto_factory::get_default_options(cmd);
+  opts.set_option("no-assertions", no_assertions);
 
   goto_functionst native_functions;
   test_convertt native_conv(p.context, opts, native_functions);
@@ -60,7 +65,8 @@ void require_native_matches_legacy(program &p, const expr2tc &body2)
     CHECK(n->type == l.type);
     CHECK(n->code == l.code);
     CHECK(n->guard == l.guard);
-    CHECK(n->location == l.location);
+    if (compare_locations)
+      CHECK(n->location == l.location);
     ++n;
   }
 }
@@ -111,4 +117,21 @@ TEST_CASE(
     code_block2tc(std::vector<expr2tc>{code_expression2tc(inner, line(4))});
 
   require_native_matches_legacy(p, body2);
+}
+
+TEST_CASE(
+  "a do-while with an empty native body is delegated, not declined",
+  "[goto-convert][irep2]")
+{
+  std::string src = SRC;
+  program p =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+
+  // An assert under --no-assertions emits nothing, so the loop body is empty.
+  const expr2tc body2 = code_block2tc(std::vector<expr2tc>{code_dowhile2tc(
+    gen_false_expr(), code_assert2tc(gen_true_expr(), line(3)), line(3))});
+
+  // The legacy side here skips restore_value_locations, which stamps the
+  // loop's back-edge GOTO from the statement location, so locations differ.
+  require_native_matches_legacy(p, body2, true, false);
 }
