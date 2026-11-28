@@ -2690,3 +2690,30 @@ holds: the printed values satisfy the property), not a trace the flag
 corrupts. The other 26 C tests and the 22 C++ tests listed in §8.43 were not
 re-inspected here, so the trace gate stays unmet. Bitwuzla, the Python suite
 and the SV-COMP run are also still unmeasured.
+
+### 8.45 Phase 3: trace audit of the C suite and a Z3 timeout on master `e4f9dcd4c`
+
+Z3-only RelWithDebInfo build of master `e4f9dcd4c`. Every `CORE` test of
+`regression/esbmc` that expects `VERIFICATION FAILED` and passes no solver,
+k-induction, parallel, witness, multi-property, incremental or flag option
+itself, run with and without `--field-sensitive-ssa`, 30 s per run, `[Counterexample]`
+block compared, 4 jobs, capped at 590 s: 1313 of 3874 test directories were
+reached, 33 differ (8 are `synth_loop_invariant_*`, which differ in printed
+timings, as in §8.43). The C++ and Python suites, Bitwuzla and SV-COMP were
+not run.
+
+- Inspected, and they fit rows already in §8.6 and §8.43: a member step printed
+  in place of a whole-struct step (`counterexample_aggregate_component_fail`,
+  `github_10135_fail`, `github_1093`, `github_7521_uintptr_fail`), a step added
+  for a member write (`github_300_failed`, `github_6559_fail`,
+  `github_7597-merged-base_fail`, `github_9443_fail`), a whole-struct step
+  dropped (`github_1590-local`), an array element printed as `{ 0 }`
+  (`counterexample_component_value_fail`, `github_719`).
+- `struct_array_ite_new_index_fail` is not a trace difference. Under Z3 it
+  reports `VERIFICATION FAILED` in 1 s without the flag and has no verdict
+  after 200 s with it. §8.6 recorded it only as a print difference under
+  Bitwuzla. Invariant 4 holds only if the verdict is reached, so this is a
+  completeness regression under Z3 and the Phase 3 gate is not met until it is
+  explained or fixed. Not yet investigated.
+- The other diffs listed by the run (`github_10965*`, `github_5393_array_member*`,
+  `github_10789_gmtime_fail`) were not re-inspected here.
