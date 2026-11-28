@@ -465,6 +465,8 @@ void symex_slicet::slice_renumber(Step &SSA_step)
 template <class Step>
 void symex_slicet::slice_event(Step &SSA_step)
 {
+  // A join on a symbolic thread id reads an element of the ids' array here.
+  scan_array_uses(SSA_step.guard);
   collect_dependencies(SSA_step.guard);
   if (SSA_step.type == symex_targett::SHARED_WRITE)
   {

@@ -840,6 +840,15 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  *p = q;\n"
     "  return 1;\n"
     "}\n"
+    // The target of cbmc_adapter's `allocate`, which CBMC never lets fail. A
+    // request above PTRDIFF_MAX still yields NULL, as under
+    // --force-malloc-success, rather than an assumption that prunes the path.
+    "void *__cbmc_allocate_impl(__SIZE_TYPE__ n, _Bool zero)\n"
+    "{\n"
+    "  void *q = zero ? calloc(1, n) : malloc(n);\n"
+    "  __ESBMC_assume(q != 0 || n > __PTRDIFF_MAX__);\n"
+    "  return q;\n"
+    "}\n"
     // CBMC's __CPROVER_array_replace copies the shorter of the two objects'
     // remainders and keeps the destination's tail; __CPROVER_array_copy
     // additionally leaves that tail unconstrained (copied from an
@@ -889,8 +898,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
-    // Also the target of cbmc_adapter's zero-initialising `allocate`.
-    "  (void *)calloc,\n"
+    "  (void *)calloc,    (void *)__cbmc_allocate_impl,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)__cbmc_array_copy_impl, (void *)__cbmc_array_replace_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
