@@ -322,7 +322,7 @@ Bitwuzla as they helped Z3, and Bitwuzla stays ahead of Z3 on bitvectors
 from 5 threads; Z3 with `--ir` is fastest of all, and `--ir` rejects
 `--bitwuzla`. On `esbmc-unix{,2}` (20 s each) with Bitwuzla,
 `--partial-order` decides 219 tests and both modes decide 218, which take
-74.3 s in total under `--partial-order` against 139.4 s under the default.
+71.7 s in total under `--partial-order` against 135.3 s under the default.
 The 7 disagreements are the 6 semantic differences above and
 `11_bluetooth`. `--partial-order` times out on `03_wronglock_01`, which the
 default decides in 1.7 s, still runs out of memory on `03_microbenchmark`,
