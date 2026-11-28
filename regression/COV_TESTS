@@ -2449,6 +2449,10 @@ regression/esbmc-unix/partial_order_atomic_rmw_fail
 regression/esbmc-unix/partial_order_atomic_rmw_lvalue
 regression/esbmc-unix/partial_order_atomic_rmw_lvalue_fail
 regression/esbmc-unix/partial_order_events_halt
+regression/esbmc-unix/partial_order_halt_callee
+regression/esbmc-unix/partial_order_halt_callee_fail
+regression/esbmc-unix/partial_order_halt_callee_loop
+regression/esbmc-unix/partial_order_halt_callee_loop_fail
 regression/esbmc-unix/partial_order_halt_join
 regression/esbmc-unix/partial_order_halt_join_fail
 regression/esbmc-unix/partial_order_halt_other_fail

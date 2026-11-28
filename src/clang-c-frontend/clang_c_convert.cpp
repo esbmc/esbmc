@@ -4157,8 +4157,19 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(cast.getType(), t))
       return true;
 
-    if (get_expr(*cast.getSubExpr(), new_expr))
+    // C++ materialises a prvalue operand, which converts to a reference to
+    // the temporary; the bits to reinterpret are the prvalue's.
+    const clang::Expr *src = cast.getSubExpr();
+    if (const auto *mt = llvm::dyn_cast<clang::MaterializeTemporaryExpr>(src))
+      src = mt->getSubExpr();
+
+    if (get_expr(*src, new_expr))
       return true;
+
+    // A call returning T& or T&& converts to a pointer flagged as a
+    // reference; the bits to reinterpret are those of the referenced object.
+    if (is_lvalue_or_rvalue_reference(new_expr.type()))
+      new_expr = dereference_exprt(new_expr, new_expr.type().subtype());
 
     // __builtin_bit_cast / std::bit_cast must reinterpret the value's
     // byte-level representation, NOT perform an arithmetic conversion.  Using

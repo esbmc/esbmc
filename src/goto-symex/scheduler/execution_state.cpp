@@ -1294,6 +1294,7 @@ bool execution_statet::halt_thread_at_bound(const expr2tc &cond)
   guard.add(cond);
   target->event(
     guard.as_expr(), symex_targett::HALT, expr2tc(), cur_state->source);
+  cur_state->top().halted = true;
   return true;
 }
 

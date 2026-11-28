@@ -25,6 +25,27 @@ void sarif_goto_trace(
   const goto_tracet &goto_trace,
   const std::vector<dead_store_advisoryt> &advisories = {});
 
+// One violated assertion destined for a SARIF `error` result.
+struct sarif_violation_t
+{
+  std::string message;
+  std::string file;
+  unsigned line = 0;
+
+  bool operator==(const sarif_violation_t &) const = default;
+};
+
+// The violated assertions in `goto_trace`.
+std::vector<sarif_violation_t> sarif_violations(const goto_tracet &goto_trace);
+
+// Writes `violations` and `advisories` as one SARIF document. A multi-property
+// run collects the violations of every claim and calls this once, since the
+// document is a single file.
+void sarif_violation_report(
+  const optionst &options,
+  const std::vector<sarif_violation_t> &violations,
+  const std::vector<dead_store_advisoryt> &advisories = {});
+
 // One provably-dead statement/branch found by --dead-code-check.
 struct dead_code_finding_t
 {

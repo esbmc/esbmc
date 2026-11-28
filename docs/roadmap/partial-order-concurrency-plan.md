@@ -13,14 +13,14 @@ thread and the threads that wait for it, and so does a lock on a mutex that
 is never released. An access inside an atomic section races with a plain
 one. A compound assignment to a narrow `_Atomic` object is recorded as a
 write, and accesses to an `_Atomic` object never race. A failed
-assumption, `abort()` included, stops only its own thread, and a join on a
-thread that ends returns.
+assumption, `abort()` included, stops only its own thread, also from inside
+a callee, and a join on a thread that ends returns.
 Bitwuzla runs `--partial-order` faster than Z3. Clocks are as wide as the
-event count needs, and Z3 is faster still with `--ir`. Loop guards are not
-pruned by the interval domain, which would carry one thread's writes into
-the next. `--incremental-bmc` and `--falsification` raise its unwinding
-bound, and the SV-COMP wrapper runs it on request. The effort figures are
-estimates.
+event count needs, and Z3 is faster still with `--ir`, which Bitwuzla cannot
+run. Loop guards are not pruned by the interval domain, which would carry one
+thread's writes into the next. `--incremental-bmc` and `--falsification`
+raise its unwinding bound, and the SV-COMP wrapper runs it on request. The
+effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -282,7 +282,7 @@ value per event and a stop time above them all. With Z3 (one core,
 mutex counter is unchanged (55 s against 56 s at 4 threads), and so are the
 `esbmc-unix{,2}` comparison's verdicts and times (75.8 s against 77.8 s in
 total on the 175 tests decided). The Bitwuzla times above are at 32 bits;
-narrow clocks under Bitwuzla are not measured yet.
+narrow clocks under Bitwuzla are measured below.
 
 Rerun with narrow clocks (Z3 4.13.3, 20 s each, 2026-11-27), the comparison
 decides 211 tests in both modes and finds two more disagreements.
@@ -309,6 +309,26 @@ verdicts; on the 212 tests `--partial-order` decides with both, it takes
 58.7 s in total with `--ir` against 72.7 s with bitvectors.
 `03_microbenchmark` runs out of memory with `--ir` instead of timing out.
 
+Narrow clocks under Bitwuzla (Bitwuzla 0.9.0 and Z3 4.8.12 in one build, two
+runs at a time on four cores, 2026-11-28). On the same counters, for 2, 3, 4,
+5, 6 and 8 threads, `--partial-order --bitwuzla` takes 0.3, 0.3, 0.7, 1.9,
+5.1 and >120 s with atomic sections and 0.3, 0.4, 0.5, 2.6, 8.1 and >120 s
+with the mutex. Z3 on the same build takes 0.2, 0.3, 0.5, 4.5, 21.2 and
+>120 s, and 0.3, 0.3, 0.7, 15.1, 67.1 and >120 s; with `--ir`, 0.2, 0.3,
+0.3, 0.3, 0.8 and 62.2 s, and 0.2, 0.3, 0.3, 0.3, 0.7 and 35.9 s. The default
+with Bitwuzla takes 0.4 and 6.9 s for 2 and 3 threads with atomic sections
+and 2.3 s for 2 with the mutex, and passes 120 s beyond. Every variant
+without the last join is FAILED in under 1.5 s. So narrow clocks help
+Bitwuzla as they helped Z3, and Bitwuzla stays ahead of Z3 on bitvectors
+from 5 threads; Z3 with `--ir` is fastest of all, and `--ir` rejects
+`--bitwuzla`. On `esbmc-unix{,2}` (20 s each) with Bitwuzla,
+`--partial-order` decides 219 tests and both modes decide 218, which take
+71.7 s in total under `--partial-order` against 135.3 s under the default.
+The 7 disagreements are the 6 semantic differences above and
+`11_bluetooth`. `--partial-order` times out on `03_wronglock_01`, which the
+default decides in 1.7 s, still runs out of memory on `03_microbenchmark`,
+and decides `02_phase_02` in 0.3 s, where the default times out.
+
 `--partial-order` runs under `--incremental-bmc` and `--falsification`: each
 bound is one `--partial-order` run, and the forward condition proves the
 program once no thread's loop passes the bound (`partial_order_incremental_bmc*`,
@@ -328,6 +348,21 @@ halts was taken never to return, since the disjunction of no halts is true,
 and the joining thread's later claims held. So main's `reach_error()`, which
 `--enable-unreachability-intrinsic` turns into a claim and `assume(0)`, was
 never reported. Fixed: such a thread ends (`partial_order_halt_*`).
+
+SV-COMP subset. `partial_order_compare.py` also runs SV-COMP task
+definitions, with the phase 0 options. On the 405 `unreach-call` tasks of
+the 12 `c/pthread*` directories phase 0 used (Z3 4.13.3, 30 s, 4 jobs,
+2026-11-28), `--partial-order` gave 37 wrong verdicts, all false alarms and
+36 of them in `pthread-wmm`. `assume_abort_if_not` calls `abort()` in a
+callee, and `pop_frame` restored the caller's entry guard, which dropped
+the halt from it; a loop bound in a callee did the same. Fixed: a frame
+records the halt and returning keeps the merged guard
+(`partial_order_halt_callee*`). Now `--partial-order` decides 225 tasks
+(210 from `pthread-wmm`, median 8.6 s) and the default 199 (median 3.2 s),
+every verdict right; both decide 126 and agree on all of them. The scope
+check rejects 101, 91 for a global that is not a scalar or an array of
+scalars; 64 time out and 15 run out of memory, against 162 and 44 for the
+default.
 
 ## 5. Tests
 
