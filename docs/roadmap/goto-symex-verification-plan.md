@@ -12855,6 +12855,18 @@ value-set update for a left-hand side whose type holds no pointer, once a
 read of `value_sett::assign` confirms it does nothing for such a type.
 Otherwise build the memo once per `assignment`, not once per walk.
 
+**Result of the first two walks (2026-11-28, Linux x86-64, Release, Z3,
+master `09fa278af`).** `phi_function` now runs `do_simplify` on the new `if2t`
+node alone, the guard having been simplified by the guard algebra, and renames
+the types of its two arms instead of the whole tree. `scalbrk` at
+N = 400 / 800 / 1600: symex 0.48 / 1.69 / 8.93 s before, 0.30 / 1.40 / 8.27 s
+after; slicing 0.60 / 2.81 / 13.5 s before, 0.14 / 0.69 / 3.7 s after;
+encoding 0.53 / 2.81 / 13.6 s before, 0.18 / 0.67 / 3.1 s after. Assignments
+are unchanged. Slicing and encoding fall to near linear, which supports Q4's
+hypothesis. Symex still grows about ×4 to ×6 per doubling: Q1's guard rebuild
+and the `get_original_name` memo in `assignment` are untouched. Open: the
+value-set skip and the per-`assignment` memo.
+
 **Must not break.** R61, R62 and R82 were fixed by making `rename_type`
 rename every symbolic size, through pointer subtypes. The flag must be set
 before the first expression of such a type is renamed, so their regression
