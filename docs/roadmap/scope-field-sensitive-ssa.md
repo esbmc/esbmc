@@ -2634,11 +2634,24 @@ only, RelWithDebInfo, no assert-enabled build):
   `vector_reserve_realloc`, which time out at 120 s with and without the flag
   when run alone (load made one side finish inside 30 s). 31 tests give no
   verdict on either side (timeouts).
-- Trace text, 172 sampled tests that fail and split an object: the
-  `[Counterexample]` block differs in 18. The one inspected,
-  `github_10965_member_fail`, has no array; it is the nested-struct step
-  order change of part 1 (`t.a.p = &y` against `t = {...}`). The other 17
-  were not inspected, so this gate is not met.
+- Trace text, every `CORE` test that expects `VERIFICATION FAILED` and passes
+  no solver, k-induction, parallel, witness, multi-property or flag option
+  itself (Z3, Release build of this head, 30 s per run, `[Counterexample]`
+  block through the end of the output, stdout and stderr, flag forced on
+  against off): `regression/esbmc` (3867 directories) differs in 27 tests
+  after dropping 10 `synth_loop_invariant_*` tests that differ only in
+  printed timings; `regression/esbmc-cpp/cpp` (1484 directories) differs in
+  22. Inspected from the C list: `github_10965*` (7 tests), `github_10135*`,
+  `github_1093`, `github_1590-local`, `github_1476_fail` and
+  `github_5868_div_fail` change or drop a whole-struct step in favour of the
+  member step; `counterexample_component_value_fail` and `github_719` print
+  `{ 0 }` for an array element; `github_300_failed`, `github_6559_fail`,
+  `github_7597-*`, `github_9443_fail` gain a member step;
+  `github_1533` loses the `argv[1] = &argv_str_1[0]` step; `github_10789_gmtime_fail`
+  and `github_5393_array_member_dyn_offset_fail` print another satisfying
+  value (60/61, 0/1). Not matched one by one to the four changes §8.6
+  accepts, and the C++ list was not inspected, so the trace gate is not met.
+  The lost `argv[1]` step in `github_1533` is the first to look at.
 
 Assert-enabled build, measured on 2026-11-28 on the same head (Z3 only,
 `CMAKE_BUILD_TYPE=Debug` with `-O1`, so Invariant 3's assert is live): every
