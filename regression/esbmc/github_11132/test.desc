@@ -1,0 +1,5 @@
+CORE
+main.c
+--parallel-solving --parallel-solving-threads 4 --generate-json-report
+^VERIFICATION FAILED$
+CHECK_JSON report.json $[39].status == "violation"
