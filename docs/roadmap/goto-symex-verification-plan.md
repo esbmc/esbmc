@@ -36,6 +36,9 @@ traced out of this subsystem into `src/pointer-analysis`.
 - Residuals recorded in the rows of R44, R49, R52, R54, R55, R60, R61, R64,
   R65, R68/R74, the second R69, R70 and R75. Each row says what is left.
 - Self-verification: WI-4, WI-5 and WI-6 (§13.6).
+- Scale (2026-11-28): symex is still quadratic at loop exits, in a store
+  through an integer-derived pointer, and in the encoder's pairwise layouts.
+  §16 measures each and plans Q1 to Q7.
 
 Three identifiers each name two rows. **R37** has an "Open" row and a later
 "FIXED" row; the fixed one is current (`ptr_rel_huge_object` is CORE). **R50**
@@ -12657,6 +12660,387 @@ Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`git
 `overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
 and three `goto-transcoder` tests), and the macOS build's
 `github_9081_optional_dict_value_fail`.
+
+---
+
+## 16. Scale: the quadratic costs
+
+The plan so far is about wrong verdicts. This section is about time and
+memory. Mikhail Ramalho's LLVM-IR verifier plan (`mikhailramalho/vereda`,
+commit `7c1b987b28`, `llvm-verifier-plan.md` §2) lists scale as one reason
+for a new tool: "Symex had several quadratic costs (#9169, the guard work,
+the per-member store encoding left over from #10541/#9785)." We checked each
+of the three against master, looked for others on the same paths, and turned
+what we found into work items Q1 to Q7.
+
+Measured on 2026-11-28 at master `2872e315a5`, macOS arm64, a `-g` Debug
+build, Bitwuzla 0.9.1 (the default). Absolute times from a Debug build are
+not the point. What matters is the ratio when the size doubles: about 2 is
+linear, about 4 is quadratic. Assignment counts are deterministic and
+solver-independent; they are quoted wherever they settle the question. The
+probes and commands are in §16.6.
+
+### 16.1 The claim, item by item
+
+| Claim | On master | Evidence |
+|---|---|---|
+| #9169: symex and encoding quadratic in `--unwind` (#9150) | **Fixed for #9150's shape.** The residual #9169 named (pointer-typed loop locals get a fresh L1 instance per iteration) measures linear. | #9150's program: symex 0.41 / 0.91 / 2.25 s at N = 250 / 500 / 1000, assignments 10,529 / 21,029 / 42,029. Pointer-typed loop local: 0.071 / 0.146 / 0.281 / 0.587 s at N = 100 to 800; address-taken local: 0.089 / 0.172 / 0.357 / 0.791 s. |
+| "The guard work": #5003 made guard algebra linear for loop-back merges; #9169 indexed `path_guard_decides` (#7450) | **Fixed for loop-back merges, still quadratic at loop exits.** A loop with a `break`, `return` or `goto` out of its body is quadratic in symex, in the slicer and in encoding. | §16.2, Q1 to Q4. |
+| Per-member store encoding left over from #10541 / #9785 | **Partly fixed.** #9831 made a store one assignment, but each store still costs Θ(M²) in the struct's member count M. #9785 is open. | §16.2, Q5. |
+| #10541's encoding of integer-derived pointers | **Partly reverted.** #10768 restored the pairwise flattened-pointer ties, because the function-of-address form cost 61 s / 5.7 GB against 0.6 s / 320 MB on `regression/python/dict23`. #11034 defers the pairwise layout constraints to the first address read, but once one happens they are all asserted. | Q6, Q7. |
+
+So the claim holds, but not in the form it was made. The three cited fixes
+did what their PRs said; what is left is a different shape of the same
+costs. Its trigger, a loop that can be left from inside its body, is an
+ordinary search loop.
+
+### 16.2 What grows, measured
+
+Each row doubles the size parameter. "Symex" is ESBMC's `Symex completed in`
+line.
+
+| Probe | Size | Assignments | Symex (s) | Encode (s) | RSS (MB) |
+|---|---|---|---|---|---|
+| `scalassume`: loop, no exit edge | N = 100 / 200 / 400 / 800 | 716 / 1,416 / 2,816 / 5,616 | 0.034 / 0.067 / 0.134 / 0.276 | n/a | 108 / 109 / 111 / 116 |
+| `scalret`: same loop, `if (nondet) return 0;` in the body | N = 100 / 200 / 400 / 800 | 1,416 / 2,816 / 5,616 / 11,216 | 0.182 / 0.624 / 2.302 / 8.813 | 0.026 / 0.084 / 0.302 / 1.100 | 125 / 161 / 278 / 724 |
+| `scalbrk`: same loop, `break` instead of `return` | N = 100 / 200 / 400 / 800 | 1,416 / 2,816 / 5,616 / 11,216 | 0.184 / 0.626 / 2.272 / 8.704 | 0.062 / 0.230 / 0.985 / 4.966 | 131 / 175 / 352 / 989 |
+| `heap`: `malloc`, store, `free` and an early `return` per iteration | N = 100 / 200 / 400 | 3,318 / 6,618 / 13,218 | 0.428 / 1.398 / 5.164 | 0.058 / 0.143 / 0.554 | 165 / 255 / 521 |
+| `heapnobr`: `heap` with a constant bound, no exit edge, `--force-malloc-success` | N = 100 / 200 / 400 | 1,220 / 2,420 / 4,820 | 0.095 / 0.188 / 0.377 | 0.018 / 0.037 / 0.078 | 116 / 120 / 128 |
+| `s9785_int`: 8 stores through an integer-derived pointer, M `unsigned int` members | M = 32 / 64 / 128 | 29 / 29 / 29 | 0.374 / 1.347 / 5.086 | 0.044 / 0.118 / 0.396 | 174 / 232 / 305 |
+| `s9785_arr`: as above, members `unsigned int[2]` | M = 32 / 64 / 128 | 29 / 29 / 29 | 0.650 / 1.913 / 6.233 | 0.458 / 1.043 / 2.529 | 412 / 671 / 1,260 |
+
+The exit edge is what does it. `scalassume` and `scalbrk` differ by one
+`if (nondet_int()) break;`; the first doubles, the second grows ×3.4 to ×3.8
+per doubling in symex and ×3.7 to ×5.0 in encoding. `heap` against
+`heapnobr` shows the same thing with dynamic memory. In `scalbrk` at
+N = 800 the wall time is 20.7 s, of which symex, encoding and solving account
+for 13.9 s; the slicer takes most of the rest (Q4).
+
+The SMT-LIB text does not grow quadratically. `scalret` writes 128,831 /
+257,525 / 514,925 bytes at N = 100 / 200 / 400. The formula stays linear as a
+DAG, so the cost is in passes that walk it as something larger. Q1 says why.
+
+In the `s9785` rows the assignment count is constant; the time per store is
+quadratic in M.
+
+### 16.3 Work items
+
+Each item gives the mechanism with its code location, the evidence, the
+proposed fix, and what the fix must not break. Profile figures are inclusive
+sample counts from macOS `sample`, so they overlap. "Hypothesis" marks a
+mechanism the evidence fits but no experiment has isolated.
+
+#### Q1. A loop-exit merge rebuilds the parked path's guard (P1, symex)
+
+At a loop exit, `merge_gotos` folds in one parked state per iteration. After
+the first fold, the current guard's top conjunct is a disjunction, so it
+shares no conjunct prefix with the next parked guard. `phi_function`
+(`engine/symex_goto.cpp:762`) then computes `tmp_guard -= cur_state->guard`
+(`:776`); `operator-=` (`src/irep2/irep2_guard.cpp:334`) finds no common
+prefix and no cached prefix, and falls through to the hash-set path (`:419`).
+That path builds an `unordered_set` over g2, scans all of g1, removes
+nothing, and calls `set_guard_list_and_rebuild`, which makes a new
+left-leaning `and2t` chain over every conjunct of g1 (`build_guard_expr`,
+`:289`). The parked path's whole guard comes back as the phi's condition. At
+`--unwind 5`:
+
+```
+i?1!0&0#14 == (goto_symex::guard?0!0&0#1 && !goto_symex::guard?0!0&0#2
+  && goto_symex::guard?0!0&0#3 && !goto_symex::guard?0!0&0#4
+  && goto_symex::guard?0!0&0#5 && goto_symex::guard?0!0&0#6 ? 3 : i?1!0&0#13)
+```
+
+The state parked at iteration j has O(j) conjuncts, so a loop exited at
+every iteration costs Θ(N²) at its merge. `operator|=` in
+`merge_state_guards` (`:538`) pays the same through `cached_prefix_expr` and
+`common_pointer_prefix_size`, which walk the |g2| − |g1| conjuncts that #5003
+assumed were about one. At `scalbrk` N = 1600, `merge_gotos` held 1,566 of
+2,529 symex samples: 955 in `merge_state_guards`, 756 in `phi_function`, and
+within the latter 155 in the hash-set constructor and 121 in the rebuild.
+
+*Hypothesis:* the rebuilt chain equals the parked state's cached chain
+structurally but shares none of its nodes. That would explain why the SMT
+text stays linear (conversion caches by structure) while every pointer-keyed
+memo misses (Q3, Q4).
+
+**Fix.**
+1. In `operator-=`, when the set difference removes no conjunct, return g1
+   with its list and base untouched. This drops the rebuild and keeps the
+   parked chain's nodes.
+2. Keep a persistent membership index in `guard_seq` (an `immer::set` of
+   conjunct pointers, O(1) to copy like the vector). With it, `g1 -= g2` can
+   test g2's conjuncts against g1 in O(|g2|), and finding that none occur
+   costs O(|g2|) instead of O(|g1|). At an exit merge |g2| is small.
+3. Store, for each prefix length k, the `and2t` node that spans the first k
+   conjuncts, in a second persistent vector beside the conjunct list.
+   `cached_prefix_expr` becomes one O(log₃₂ N) lookup, and
+   `common_pointer_prefix_size` a binary search over it. That replaces the
+   O(Δ) walks with no assumption about Δ.
+
+**Must not break.** `g1 -= g2` and `g1 |= g2` must keep their meaning as
+sets of conjuncts, and the base must stay the left-leaning chain over the
+list, because `cached_prefix_expr` relies on that invariant. Keep the
+debug-only reference scans that `irep2_guard.cpp` already asserts against,
+extend `unit/irep2/guard_algebra.test.cpp` (H-B4's harness) with the exit
+merge shape, and pin item 1 with `same_pointer(g1_after, g1_before)`. That
+test does not depend on timing.
+
+**Accept when** `scalbrk` and `scalret` double in symex time per doubling of
+N up to N = 1600, and the regression corpus gives the same verdicts and
+claim counts under both solvers.
+
+#### Q2. The guard walks clone every node they pass (P2, symex, constant factor)
+
+`cached_prefix_expr` (`irep2_guard.cpp:131`) and `common_pointer_prefix_size`
+(`:64`) copy the guard into a local `expr2tc` and step down it with
+`to_and2t(cur)`. The non-const `to_and2t` calls `get()`, which detaches the
+shared node, so each step of a read-only walk clones an `and2t`. In the
+`scalbrk` profile, 69 of the 118 samples in one `cached_prefix_expr` frame
+were `expr2t::clone`. §15 M9 (R149) met the same detach-on-read in
+`lower_longjmp.cpp`.
+
+**Fix.** Walk through `const expr2tc &` (or `std::as_const`). This changes
+no result. It is a constant factor and does not remove Q1's quadratic, but it
+is the smallest change here and makes Q1's before/after numbers easier to
+read, so do it first.
+
+#### Q3. Every phi walks its guard three more times (P1, symex)
+
+For each variable that differs at a merge, `phi_function` builds
+`if2tc(tmp_guard.as_expr(), merge_rhs, cur_rhs)` and then:
+
+- `simplify(rhs)` (`symex_goto.cpp:828`) recurses into the guard operand,
+  which the guard algebra already simplified;
+- `cur_state->rename_type(rhs)` (`:839`, `state/goto_symex_state.cpp:1220`)
+  walks every operand through a non-const `Foreach_operand`, unmemoised,
+  looking for array types with symbolic sizes; a program without a VLA has
+  none;
+- `goto_symex_statet::assignment` calls `level2.get_original_name(l1_rhs)`
+  (`goto_symex_state.cpp:1174`) for the value set, and
+  `renaming_levelt::get_original_name` (`state/renaming.cpp:353`) builds a
+  memo map per call (R52's fix) sized by the rhs. In the `scalbrk` profile,
+  521 of that function's 586 samples were the map's destructor.
+
+Each walk is O(|tmp_guard|) per changed variable, so with Q1 unfixed each
+merge costs O(V·j). After Q1 each is still O(|guard|) per phi wherever a
+guard is long.
+
+**Fix.** Simplify the new `if2t` node alone and leave its operands as they
+are. Have `rename_type` return at once when no type reachable from the
+expression can hold a symbolic array size; a flag set when symex first
+renames such a type makes that O(1) for programs without VLAs. Skip the
+value-set update for a left-hand side whose type holds no pointer, once a
+read of `value_sett::assign` confirms it does nothing for such a type.
+Otherwise build the memo once per `assignment`, not once per walk.
+
+**Must not break.** R61, R62 and R82 were fixed by making `rename_type`
+rename every symbolic size, through pointer subtypes. The flag must be set
+before the first expression of such a type is renamed, so their regression
+pairs (`vla_pointer_stride{,_fail}` and its siblings) must stay green. The
+value-set skip must leave the value sets of structs and unions that hold a
+pointer unchanged.
+
+#### Q4. The slicer and the encoder re-walk the rebuilt guards (P1, slicer and SMT)
+
+`symex_slicet::collect_dependencies` (`equation/slice.cpp:10`) and
+`scan_array_uses` memoise by node pointer (`collected_cache`, `:47`), which
+makes a shared guard prefix cost O(N) overall. Q1's rebuilt chains share
+no pointers, so the memo misses on every step. At `scalbrk` N = 1200, 7,736 of
+7,739 samples taken after symex were in `symex_slicet::run_on`: 2,723 in
+`slice_assignment`, 1,519 in `slice_assume`, and 605 and 587 in the two walks.
+
+*Hypothesis:* both this and the quadratic encoding time in §16.2 follow from
+Q1. Conversion caches by structure, but it still has to hash each fresh node
+once.
+
+**Fix.** None of its own until Q1 lands. Re-measure the slicer and the
+encoding on `scalbrk` afterwards. If either is still quadratic, count the
+distinct `expr2t *` each pass visits against N to find what is fresh, and
+only then consider a structural-hash memo in the slicer.
+
+#### Q5. A store through an integer-derived pointer guards each member by every other member (P1, symex)
+
+For an object reached at an unknown offset, `construct_from_dyn_struct_offset`
+(`src/pointer-analysis/dereference.cpp:2338`) returns an `if` chain with one
+arm per member (`:2480`). Written to, the chain goes through
+`symex_assign_if` and `symex_assign_member_arms`
+(`engine/symex_assign.cpp:1301`). `symex_assign_if` adds `!cond` for each
+enclosing arm to the guard (`:1295`), so the store into member k carries the
+negated range test of every arm nested outside it. For a 5-member struct:
+
+```
+.m0=(... ((off % 160 < 128 || off % 160 >= 160) && (off % 160 < 96 || off % 160 >= 128)
+       && (off % 160 < 64 || off % 160 >= 96) && (off % 160 < 32 || off % 160 >= 64)
+       && off % 160 < 32 && off % 160 == 0) ...)
+```
+
+That is Θ(M²) guard literals per store. `merge_member_stores` (`:1340`)
+already assumes "at most one store's guard holds". The profile of
+`s9785_int` at M = 256 puts 2,876 of 3,353 `symex_step` samples in
+`do_simplify` under `symex_assign_symbol`, simplifying the merged store. #9831's
+single `byte_update` did not apply to the probe's `struct port ports[1]`:
+its profile runs through `symex_assign_array`, which is why the `int` row of
+§16.2 is quadratic at all.
+
+**Fix.**
+1. Guard each arm by its own condition alone, when its offset interval is
+   disjoint from every arm that takes precedence over it. The intervals are
+   constants, so the dereference can decide this when it builds the chain and
+   mark the arm. The final failed-symbol arm still needs the negation of the
+   others.
+2. Extend #9831's `byte_update` route to an array of flat structs, the shape
+   #9785's `altera_jtaguart` task has. Its "Expected" section asks for
+   exactly that.
+3. For structs with float or array members, where Z3 rejects a `byte_update`
+   (`github_123`, `github_1289`), item 1 is the fix.
+
+**Must not break.** The arms are not always disjoint. `add_arms_from` emits
+spanning arms for an access that straddles members, and they are "Emplaced
+after the field's own arm, so they take precedence (#10045)". Dropping the
+negation on an arm that overlaps a higher-precedence arm writes two members
+for one store, which is a wrong verdict in either direction. Item 1 must
+therefore keep the negation for every overlapping pair. #10045's tests,
+`intptr_struct_store{,_fail}`, `github_9785_*` and the bit-field arms of
+#10087 pin it. This item adds a branch, so it also needs the Mode C C-Live
+proof.
+
+**Accept when** `s9785_int` and `s9785_arr` grow linearly in M, and #9785's
+`altera_jtaguart` task finishes its k = 3 base case. #10541 left it timing
+out there.
+
+#### Q6. Object layouts and integer-to-pointer casts are pairwise (P1, encoder)
+
+Two constructions grow with the number of registered objects N:
+
+- `finalize_pointer_chain` (`src/solvers/smt/smt_memspace.cpp:669`) asserts
+  a non-overlap disjunction for every pair (`:683`), N(N−1)/2 in all, once
+  the first address is read. #11034 made that lazy; the pairs come back in
+  rounds through `assert_overlapping_layouts` (`:725`).
+- `convert_typecast_to_ptr` (`smt_casts.cpp:427`) builds a range test and an
+  implication for every registered object per cast: O(C·N) for C casts.
+
+`objs` (N globals with their addresses in a table, C casts of a table entry
+through `uintptr_t`):
+
+| N, C | Encode (s) | Solve (s) | RSS (MB) |
+|---|---|---|---|
+| 16, 8 | 0.012 | 2.98 | 673 |
+| 32, 8 | 0.023 | 9.79 | 1,524 |
+| 64, 8 | 0.057 | 27.5 | 3,357 |
+| 128, 8 | 0.162 | 93.1 | 5,880 |
+| 32, 16 | 0.032 | 14.2 | 2,237 |
+| 32, 32 | 0.048 | 227.9 | 5,768 |
+
+Encoding stays under 0.2 s, so the cost is the solver's search and the
+memory it takes, not formula size. We have not yet separated the layout
+pairs from the cast chains, or counted the refinement rounds. That
+instrumentation comes before any fix: a counter of rounds in
+`assert_overlapping_layouts`, and an ablation that keeps the layouts and
+drops all but the matching cast arm. The memory note on #10797 points the
+same way. There, native address-space arrays lose to the expanded encoding
+above about 40 registered objects.
+
+**Fix, once the instrument says which construction dominates.**
+- Layouts: sort the (start, end) pairs with a Batcher network and require
+  each end below the next start. That is O(N log² N) comparators, and it
+  keeps every layout, as the pairwise form does. A fixed order of objects is
+  smaller but drops layouts a program can observe through `uintptr_t`, so it
+  is out. Freed heap objects may overlap (the `__ESBMC_alloc` guard at
+  `smt_memspace.cpp:702`), so a freed object needs a sentinel position in the
+  sort.
+- Casts: when the integer is a pointer converted to an integer with no
+  arithmetic in between, symex can fold the round trip and the chain is
+  never built. For the rest, the chain is what makes integer-derived pointers
+  sound in this memory model (#7855, #10905, cited in `smt_casts.cpp` and
+  `smt_memspace.cpp`), and shrinking it needs a provenance argument nobody
+  has written down yet.
+
+**Must not break.** `github_9221{,_fail}` and `github_9221_formula` (layouts
+after `free`), `github_9785_push_pop` (layouts reopened by push/pop), and
+the `--smt-during-symex` path, which never uses `name_object_by_value`.
+
+#### Q7. Flattened-pointer ties are pairwise again (P2, encoder)
+
+#10541 tied each flattened pointer to an uninterpreted function of its
+address. #10768 went back to pairwise implications over
+`ptr_flatten_history` (`smt_bitcast.cpp:288`), F(F−1)/2 for F flattens,
+because the function form was 100 times slower on `dict23`. Pairwise is the
+faster encoding at F = 64. #10768 asked for an SV-COMP run on #9785's task
+before deciding, and this plan has no newer measurement. Leave Q7 alone
+until that run exists, and then find the F where pairwise loses.
+
+### 16.4 Measured, and not symex's to fix
+
+Two probes grew faster than linear outside symex. They are recorded so they
+are not reopened as symex work.
+
+- `seqif`, N sequential `if (nondet) x++;` and `assert(x <= N)`: symex and
+  encoding are linear (0.026 to 0.221 s, 0.012 to 0.101 s at N = 200 to
+  1600), but solving goes 1.05 / 4.20 / 19.3 / 134.6 s. The solver has to
+  prove a bound on a sum of N bits.
+- `list`, a linked list built in a loop and then walked: symex 0.032 /
+  0.083 / 0.272 s at N = 10 / 20 / 40. The walk dereferences a pointer whose
+  value set holds all N nodes, so the case split is Θ(N²). That is the
+  value-set memory model, not a defect in symex.
+
+### 16.5 Order and gates
+
+Q2 first, since it is the smallest change and makes Q1 easier to measure.
+Then Q1, then a re-measurement that decides how much of Q3 and Q4 is left.
+Q5 is independent and can run beside Q1. Q6 starts with its instrument. Q7
+waits on the SV-COMP run.
+
+Every item carries `needs-svcomp-run`. Each one changes the formula ESBMC
+asks, and a symex change that only moves time is still checked for verdicts
+before it merges. Every fix also clears these gates:
+
+1. A growth test that does not depend on wall time. Use the assignment or
+   node count, or a pointer-identity assertion as in Q1, in a unit test or
+   a regression pair, so CI noise cannot turn it green or red.
+2. Unchanged verdicts and claim counts on the regression corpus under
+   Bitwuzla and Z3. The H-C oracles in §7.4 apply as written.
+3. Mode C for every branch added (Q1 item 1, Q3's early returns, Q5 item 1),
+   and the coverage gate.
+
+### 16.6 Reproducing §16
+
+Run from a scratch directory with a built `esbmc` on `PATH`.
+
+```c
+/* scalbrk.c; scalret.c is the same with `return 0;` for `break;`, and
+ * scalassume.c drops the `if` and asserts `s >= 0 || i > 0` in the body. */
+int nondet_int();
+int main(){ int i = 0, s = 0;
+  while (nondet_int()) { s += i; i++; if (nondet_int()) break; }
+  __ESBMC_assert(i >= 0, ""); return 0; }
+```
+
+```sh
+for n in 100 200 400 800; do
+  esbmc scalbrk.c --unwind $n --no-unwinding-assertions \
+    | grep -E 'Symex completed|Encoding to solver'
+done
+esbmc scalbrk.c --unwind 5 --no-unwinding-assertions --no-slice --program-only
+```
+
+`heap.c` is `while (nondet_int()) { int *p = malloc(sizeof(int)); if (!p)
+return 0; *p = 1; s += *p; free(p); }`, run the same way.
+
+`s9785_<kind>_<M>_8.c` declares `struct port` with M members (`unsigned int
+m<k>;`, or `unsigned int m<k>[2];`), `static struct port ports[1];`,
+`unsigned long base = (unsigned long)ports + i * sizeof(struct port);` for a
+nondet `i <= 0`, eight stores `*((unsigned int *)(base + 4*(1 + s % (M-1)))) = s;`
+and one read, as in #9785's issue program. Run it with
+`--no-pointer-check --no-bounds-check --no-align-check`.
+
+`obj_<N>_<C>.c` declares N `int` globals, a table of their addresses, sets
+each global to `nondet_int()`, does C times `{ uintptr_t a =
+(uintptr_t)tab[nondet_int() % N]; int *p = (int *)a; s += *p; }`, and asserts
+`s != 123456789 || nondet_int()`. It takes the same three flags and
+`--no-slice`. N = 128 needs about 6 GB; run it alone.
+
+Profiles: `sample <pid> 12 -file out.sample` on macOS while the run is in the
+phase of interest, or `perf record -g` on Linux.
 
 ---
 
