@@ -2667,3 +2667,26 @@ Not measured: Bitwuzla (not installable in the sandbox), the Python suite
 not reach it), the full suites, the corpus rows
 under the 2x bar for any case beyond the n=2048 one above, and the SV-COMP
 run.
+
+### 8.44 Phase 3: the `github_1533` trace difference on master `b7651aa8f`
+
+Z3-only RelWithDebInfo build of master `b7651aa8f` (#11120 merged). The
+`regression/esbmc/github_1533` command (`--unwind 1 --no-unwinding-assertions
+--overflow-check --z3 --no-slice`), run once with and once without
+`--field-sensitive-ssa`, 120 s each. Both print `VERIFICATION FAILED`. The
+flag splits 3 objects. The counterexamples differ because the solver reports
+another failing property, not because a step was lost:
+
+- Without the flag the failing property is the VLA size overflow at line 131
+  of `main`; the trace includes `argv[1] = &argv_str_1[0]` (State 23) and the
+  `adjacent_list` and `adjacent_matrix` steps.
+- With the flag it is the NULL dereference at line 20 of `get_graph_size`
+  (`argv[1]` is NULL in that model), so the trace stops there and has no
+  `argv[1]` step. The property summary reads 2 of 78 failed against 1 of 78.
+- Every `State` number after the first difference shifts accordingly.
+
+So this is a different satisfying model of an unchanged verdict (Invariant 4
+holds: the printed values satisfy the property), not a trace the flag
+corrupts. The other 26 C tests and the 22 C++ tests listed in §8.43 were not
+re-inspected here, so the trace gate stays unmet. Bitwuzla, the Python suite
+and the SV-COMP run are also still unmeasured.
