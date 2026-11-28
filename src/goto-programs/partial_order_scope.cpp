@@ -3,6 +3,7 @@
 #include <util/base/filesystem.h>
 #include <util/message/message.h>
 
+#include <algorithm>
 #include <set>
 #include <string>
 
@@ -282,22 +283,8 @@ private:
       is_mutex_type(to_address_of2t(e).ptr_obj->type))
       return true;
 
-    if (is_symbol2t(e))
-      if (
-        const std::string state = scheduler_state_name(to_symbol2t(e));
-        !state.empty())
-        return reject("the scheduler state " + state);
-
-    if (
-      is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
-      !is_partial_order_type(e->type))
-      return reject("a global that is not a scalar or an array of scalars");
-
-    // An array is one object, so accesses to distinct elements would race.
-    if (
-      races && is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
-      is_array_type(e->type))
-      return reject("checking data races on a global array");
+    if (is_symbol2t(e) && !check_symbol(e))
+      return false;
 
     bool ok = true;
     e->foreach_operand([this, &ok](const expr2tc &op) {
@@ -305,6 +292,24 @@ private:
         ok = check_expr(op);
     });
     return ok;
+  }
+
+  bool check_symbol(const expr2tc &e) const
+  {
+    const symbol2t &sym = to_symbol2t(e);
+    if (const std::string state = scheduler_state_name(sym); !state.empty())
+      return reject("the scheduler state " + state);
+
+    if (!is_shared(sym))
+      return true;
+    if (!is_partial_order_type(e->type))
+      return reject(
+        "a global that is not a scalar or an array or struct of them");
+    // An array or a struct is one object, so accesses to distinct elements or
+    // fields would race.
+    if (races && (is_array_type(e->type) || is_struct_type(e->type)))
+      return reject("checking data races on a global array or struct");
+    return true;
   }
 
   bool is_shared(const symbol2t &sym) const
@@ -317,8 +322,9 @@ private:
     if (!is_address_of2t(e))
       return false;
     expr2tc obj = to_address_of2t(e).ptr_obj;
-    while (is_index2t(obj))
-      obj = to_index2t(obj).source_value;
+    while (is_index2t(obj) || is_member2t(obj))
+      obj = is_index2t(obj) ? to_index2t(obj).source_value
+                            : to_member2t(obj).source_value;
     return is_symbol2t(obj) && is_shared(to_symbol2t(obj));
   }
 
@@ -338,6 +344,17 @@ bool is_partial_order_type(const type2tc &t)
 {
   if (is_array_type(t))
     return is_partial_order_type(to_array_type(t).subtype);
+  // The operational model's sync objects are ordered by LOCK and UNLOCK
+  // events, not by their fields.
+  if (is_struct_type(t))
+  {
+    const struct_type2t &s = to_struct_type(t);
+    return s.name.as_string().find("pthread_") == std::string::npos &&
+           std::all_of(
+             s.members.begin(), s.members.end(), [](const type2tc &m) {
+               return is_partial_order_type(m);
+             });
+  }
   return is_bv_type(t) || is_bool_type(t) || is_fixedbv_type(t) ||
          is_floatbv_type(t);
 }

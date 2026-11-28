@@ -1,5 +1,5 @@
 CORE
 main.c
 --partial-order --data-races-check
-^ERROR: --partial-order does not support checking data races on a global array yet, at file .*main\.c line 13 column 3 function main$
+^ERROR: --partial-order does not support checking data races on a global array or struct yet, at file .*main\.c line 13 column 3 function main$
 \A(?![\s\S]*VERIFICATION)[\s\S]*\Z

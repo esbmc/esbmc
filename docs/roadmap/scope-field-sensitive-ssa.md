@@ -40,7 +40,8 @@ host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
 may start with that exception recorded.**
-> Phase 3, first part (nested structs; arrays of structs are not started, and
+> Phase 3, first part (nested structs; arrays of structs by constant index are
+> in draft PR from `feat/field-sensitive-ssa-phase3-arrays-of-structs`, §8.43, and
 > k-induction havoc already goes through member chains, §8.42): a struct member of a split object is split in turn,
 > up to 4096 leaves per object (§8.38). The gate is not met: see §8.38.
 > The corpus is in `regression/field-sensitivity/`
@@ -2585,3 +2586,107 @@ model; the build takes about 35 minutes on 4 cores).
 
 Not measured: everything else the Phase 3 gate lists, as in §8.41. The Phase 3
 gate stays unmet.
+
+### 8.43 Phase 3: arrays of structs by constant index (draft, gate not met)
+
+`feat/field-sensitive-ssa-phase3-arrays-of-structs` splits a fixed-size array
+of structs (at most 4096 elements) into one object per element, split in turn
+when the element struct is; an index that is not a constant inside the bounds
+keeps the array whole. Z3-only RelWithDebInfo build of this branch merged with
+master `8dae50c58` (no Bitwuzla in the sandbox). Each `test.desc` command was
+run with and without `--field-sensitive-ssa`, 30 s per run, verdict line
+compared:
+
+| Suite | Tests run | Verdict changes | Timeouts |
+|---|---|---|---|
+| `regression/esbmc` CORE | 3323 of 3864 | 0 | 8 |
+| `regression/esbmc-cpp/cpp` CORE | 1214 of 1482 | 0 | 12 |
+| `regression/k-induction` CORE | 275 of 316 | 0 | 2 |
+
+Tests that pass the flag, `--k-induction` (except in the k-induction row) or
+a Bitwuzla option themselves were skipped; trace text was not diffed. The 30
+`field-sensitivity/` corpus tests and the three `field_sensitive_ssa_array_*`
+tests pass under ctest. `field_sensitive_ssa_array_const` expected 2 split
+objects; it splits 5 (the array, its three elements and `b`), and the
+expectation is corrected.
+
+Constant-index array of `struct { int x, y; }`, two writes per element, Z3,
+one run each: n=8 0.13 s off, 0.12 s on; n=512 0.30 s, 0.23 s; n=2048 3.7 s,
+0.96 s.
+
+Measured on 2026-11-28 on the branch merged with master `f72cfcaab` (Z3
+only, RelWithDebInfo, no assert-enabled build):
+
+- Unreachability harnesses (`--enable-unreachability-intrinsic --unwind 10`,
+  Z3, with and without the flag, 9 programs, all `VERIFICATION FAILED` in both
+  modes, i.e. the `__ESBMC_unreachable()` is reachable): constant in-bounds
+  read, write and element copy (splits 5); whole-array and element copy (8);
+  dynamic index (not split, the `symbol_root` exclusion); address taken and
+  pointer arithmetic over the array (not split); array of structs inside a
+  struct, copied whole (8); one-element array, index `n-1` (2); decayed
+  parameter (not split); a 4096-element array (split) next to a 4097-element
+  one (not).
+- Every fourth `CORE` test of `regression/esbmc` (823) and
+  `regression/esbmc-cpp/cpp` (336), flag forced on against off, 30 s per run,
+  4 parallel jobs, tests passing the flag, k-induction, parallel, witness,
+  multi-property or a non-Z3 solver skipped: 1159 tests, 415 with a split
+  object. Verdict differences: 2, `vector_reserve_unwind_invariant` and
+  `vector_reserve_realloc`, which time out at 120 s with and without the flag
+  when run alone (load made one side finish inside 30 s). 31 tests give no
+  verdict on either side (timeouts).
+- Trace text, every `CORE` test that expects `VERIFICATION FAILED` and passes
+  no solver, k-induction, parallel, witness, multi-property or flag option
+  itself (Z3, Release build of this head, 30 s per run, `[Counterexample]`
+  block through the end of the output, stdout and stderr, flag forced on
+  against off): `regression/esbmc` (3867 directories) differs in 27 tests
+  after dropping 10 `synth_loop_invariant_*` tests that differ only in
+  printed timings; `regression/esbmc-cpp/cpp` (1484 directories) differs in
+  22. Inspected from the C list: `github_10965*` (7 tests), `github_10135*`,
+  `github_1093`, `github_1590-local`, `github_1476_fail` and
+  `github_5868_div_fail` change or drop a whole-struct step in favour of the
+  member step; `counterexample_component_value_fail` and `github_719` print
+  `{ 0 }` for an array element; `github_300_failed`, `github_6559_fail`,
+  `github_7597-*`, `github_9443_fail` gain a member step;
+  `github_1533` loses the `argv[1] = &argv_str_1[0]` step; `github_10789_gmtime_fail`
+  and `github_5393_array_member_dyn_offset_fail` print another satisfying
+  value (60/61, 0/1). Not matched one by one to the four changes §8.6
+  accepts, and the C++ list was not inspected, so the trace gate is not met.
+  The lost `argv[1]` step in `github_1533` is the first to look at.
+
+Assert-enabled build, measured on 2026-11-28 on the same head (Z3 only,
+`CMAKE_BUILD_TYPE=Debug` with `-O1`, so Invariant 3's assert is live): every
+`CORE` test of `regression/esbmc`, `regression/esbmc-cpp/cpp` and
+`regression/field-sensitivity` that does not pass a solver, parallel, witness
+or the flag itself, run with `--field-sensitive-ssa` appended, 20 s per run.
+No run printed a failed assertion (the number of tests run was not recorded;
+verdicts were not compared in this run). ctest
+`field_sensitive_ssa|field-sensitivity`: 80/80 pass.
+
+Not measured: Bitwuzla (not installable in the sandbox), the Python suite
+(not built; `eligible` rejects `mode == "Python"`, so the array change does
+not reach it), the full suites, the corpus rows
+under the 2x bar for any case beyond the n=2048 one above, and the SV-COMP
+run.
+
+### 8.44 Phase 3: the `github_1533` trace difference on master `b7651aa8f`
+
+Z3-only RelWithDebInfo build of master `b7651aa8f` (#11120 merged). The
+`regression/esbmc/github_1533` command (`--unwind 1 --no-unwinding-assertions
+--overflow-check --z3 --no-slice`), run once with and once without
+`--field-sensitive-ssa`, 120 s each. Both print `VERIFICATION FAILED`. The
+flag splits 3 objects. The counterexamples differ because the solver reports
+another failing property, not because a step was lost:
+
+- Without the flag the failing property is the VLA size overflow at line 131
+  of `main`; the trace includes `argv[1] = &argv_str_1[0]` (State 23) and the
+  `adjacent_list` and `adjacent_matrix` steps.
+- With the flag it is the NULL dereference at line 20 of `get_graph_size`
+  (`argv[1]` is NULL in that model), so the trace stops there and has no
+  `argv[1]` step. The property summary reads 2 of 78 failed against 1 of 78.
+- Every `State` number after the first difference shifts accordingly.
+
+So this is a different satisfying model of an unchanged verdict (Invariant 4
+holds: the printed values satisfy the property), not a trace the flag
+corrupts. The other 26 C tests and the 22 C++ tests listed in §8.43 were not
+re-inspected here, so the trace gate stays unmet. Bitwuzla, the Python suite
+and the SV-COMP run are also still unmeasured.

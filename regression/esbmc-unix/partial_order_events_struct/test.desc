@@ -1,0 +1,7 @@
+CORE
+main.c
+--partial-order --program-only
+^/\* \d+ \*/ Thread 0 file .*main\.c line 18 .*\nSHARED_READ c:@g&0#\d+$
+^/\* \d+ \*/ Thread 1 file .*main\.c line 11 .*\nSHARED_WRITE c:@g&0#\d+ updating c:@g&0#\d+$
+\A(?![\s\S]*line 11 [^\n]*\nSHARED_READ)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

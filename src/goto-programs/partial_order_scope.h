@@ -23,6 +23,7 @@ bool partial_order_in_scope(
 /// as events. The operational model's own state is not one.
 bool is_partial_order_global(const namespacet &ns, const irep_idt &name);
 
-/// The types of the globals --partial-order handles: scalars and arrays of
-/// them. An array is one object; an assignment to an element updates it.
+/// The types of the globals --partial-order handles: scalars, and arrays and
+/// structs of them. An array or a struct is one object; an assignment to an
+/// element or a field updates it.
 bool is_partial_order_type(const type2tc &t);

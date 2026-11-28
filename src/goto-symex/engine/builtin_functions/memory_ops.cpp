@@ -2264,6 +2264,23 @@ void goto_symext::intrinsic_havoc_object(
   if (cur_state->guard.is_false())
     return;
 
+  if (checked && !options.get_bool_option("no-pointer-check"))
+  {
+    // An INTERNAL dereference drops an unknown or invalid target without a
+    // claim. Check it as the byte write it stands for.
+    expr2tc l1_ptr = call.operands[0];
+    cur_state->top().level1.rename(l1_ptr);
+    value_setst::valuest targets;
+    cur_state->value_set.get_value_set(l1_ptr, targets);
+    if (std::any_of(targets.begin(), targets.end(), [](const expr2tc &t) {
+          return is_unknown2t(t) || is_invalid2t(t);
+        }))
+    {
+      expr2tc write = dereference2tc(get_uint8_type(), call.operands[0]);
+      dereference(write, dereferencet::WRITE);
+    }
+  }
+
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
   dereference(deref, dereferencet::INTERNAL, !checked);
